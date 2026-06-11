@@ -59,7 +59,7 @@ export class Clouds {
   readonly weatherMap: StorageTexture;
   /** r: transmittance toward the sun through the layer, top-down */
   readonly shadowMap: StorageTexture;
-  readonly coverage = uniform(0.46);
+  readonly coverage = uniform(0.62);
   readonly density = uniform(0.85);
   private atmosphere: Atmosphere;
   private shadowKernel: Parameters<Renderer['computeAsync']>[0] | null = null;

@@ -33,7 +33,8 @@
       "Bash(curl -s \"http://localhost:5173/src/sky/Clouds.ts\")",
       "Bash(curl -s \"http://localhost:5173/src/render/PostStack.ts\")",
       "Bash(python3 *)",
-      "Bash(git commit -q -m 'Erosion + meshing rework per user feedback: organic channels, skirted adaptive tiles *)"
+      "Bash(git commit -q -m 'Erosion + meshing rework per user feedback: organic channels, skirted adaptive tiles *)",
+      "Bash(git commit -q -m 'Clouds: default coverage 0.62 *)"
     ]
   }
 }
