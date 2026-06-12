@@ -636,12 +636,26 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
   (shots/wip/bm2-rejudge.png). NOT this session's AO work — ?ablate=ao
   renders identically (shots/wip/bm2-ablao.png) — and NOT present at
   noon lakeshore framings (same lake, dead flat in this session's
-  sweeps: shots/wip/horizon-yaw*.png). Candidates: water clipmap
-  level-boundary geometry at the wetland margin ("water walls"/
-  staircase-shards gotcha family), wet-margin hummocks piercing the
-  surface, dawn-grazing fresnel on ripple-steep normals; could be
-  long-standing (bm2's mist used to soften the area) — bisect with
-  ?ablate=water / ?waterdbg ladder / T sweep at the bm2 pose.
+  sweeps: shots/wip/horizon-yaw*.png). BISECTED (same day):
+  (a) ?ablate=water at bm2 — the dark swells PERSIST (they are wet
+  TERRAIN: hummocky wetland-margin/bed geometry with moisture darkening,
+  not water; whether that look is acceptable is an art-direction
+  question, separate item) while the white shards VANISH ⇒ shards are
+  water-surface fragments; (b) same pose at noon (shots/wip/bm2-noon.png)
+  — identical tent row along the far shore ⇒ not ToD-specific.
+  WORKING HYPOTHESIS (matches the recorded "one wet texel stretched
+  across a coarse cell" clipmap gotcha): clipmap levels with cell ≥ 6 m
+  (extents ±384/±768 m cover the tent row's range) stride-sample waterY
+  across the margin's TEXEL-SCALE wet/dry alternation — a lone wet texel
+  hoists one coarse vertex to W while its neighbors dive to bed−2 m →
+  steep triangles reading white under grazing fresnel. Open-water
+  framings (this session's lakeshore sweeps) show none — no
+  salt-and-pepper wetness there. NEXT: ?view=hydro at the margin +
+  CPU-sample waterY along the tent row to confirm; candidate fixes
+  ranked: (1) wet-coverage gate per coarse vertex (vertex takes W only
+  when ≥ half its footprint is wet — needs a coverage mip alongside the
+  min-reduction), (2) extend the min-reduced field down to the 6 m
+  level, (3) margin-aware wet-masked smoothing of the render W field.
 
 ## Key decisions log
 
