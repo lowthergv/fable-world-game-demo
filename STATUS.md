@@ -199,16 +199,36 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 - **USER FEEDBACK BATCH 2 (2026-06-12, live session after Phase 6 +
   bookmarks) — WORK THIS LIST FIRST, in roughly this order. User wording
   preserved; agent root-cause notes inline.**
-  1. WIND REPETITIVE (trees/shrubs): "move slower for a bit, then they
-     shake two times, over and over... very unrealistic". Grass is
-     "semi-okay". ROOT CAUSE: flutter/pump are pure fixed-frequency sines
-     (Wind.ts: pump 1.1 Hz, f1 ~3.4+gust·1.6, f2 2.3) → global beat
-     envelope every few seconds, same rhythm on every plant (phase
-     offsets don't break the shared TEMPO). FIX: replace sin oscillators
-     with advected-noise sampling (aperiodic — e.g. fbm at 2 speeds via
-     noiseA like gustAt but faster/smaller), add per-INSTANCE frequency
-     jitter (not just phase), amplitude driven by the traveling gust
-     field. Keep grass as-is mostly.
+  1. WIND NEEDS A BIGGER REWORK (user-flagged twice; top priority).
+     Symptoms: (a) "move slower for a bit, then they shake two times,
+     over and over" — repetitive shared rhythm; (b) cliff-top tree
+     "shaking more wildly, v fast, looks kinda bugged out"; (c) design:
+     "things should be logically swaying MORE, not faster, in strong
+     wind. and skeletally (could be faked) swaying". Grass "semi-okay".
+     THREE CONFIRMED CAUSES in Wind.ts:
+     (i) PHASE-EXPLOSION BUG: f1 = sin(time·(3.4+gust·1.6)) — time ×
+         TIME-VARYING frequency ⇒ phase = t·f(t); any gust change slews
+         phase by t·Δf — at t=10 min a 1% gust wobble = ~10 rad/frame ⇒
+         chaotic fast jitter, worst where gust VARIANCE is high (exposed
+         cliff tops), grows with session time. NEVER multiply `time` by
+         a varying frequency — integrate phase or use fixed freq + noise.
+     (ii) fixed-frequency sine trio (1.1/2.3/3.4 Hz) beats in a global
+         repeating envelope — every plant shares the tempo.
+     (iii) strength wired into FREQUENCY feel instead of amplitude.
+     REWORK DESIGN (fake-skeletal, vertex-only, keep it cheap):
+     - mean LEAN downwind ∝ strength² × exposure (whole plant, ls.y²
+       cantilever profile from the base — reads as the trunk bending).
+     - slow SWAY around the lean at a per-instance NATURAL frequency
+       (hash: 0.15–0.45 Hz, big trees slower via pool scale), amplitude
+       ∝ gust strength (NOT freq) — damped-spring feel: drive with the
+       traveling gust field sampled at the instance + a small fixed-freq
+       resonant term whose AMPLITUDE follows the gust.
+     - branch SECONDARY motion: vdata.y-scaled deflection that LAGS the
+       trunk (sample the gust field with a small upwind offset ≈ time
+       lag), modest aperiodic flutter from advected noise (no sines with
+       varying freq; per-instance fixed freq jitter ok).
+     - leaf/card micro-flutter amplitude ∝ strength, fades by ~120 m.
+     - grass: keep current feel (user ok), just inherit the lean² rule.
   2. FOG WASHES OUT THE SCENE: "so global that it simply washes out the
      scene... already washed out feeling". FIX: cut Froxels base density
      (fogK default 1.0 → ~0.4), make it valley/moisture-SELECTIVE
