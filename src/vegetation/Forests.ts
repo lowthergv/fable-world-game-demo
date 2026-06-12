@@ -84,6 +84,7 @@ import type { ProbeGI } from '../gpu/passes/ProbeGI';
 import { canopyAt, type ScatterLayer, type ScatterResult } from '../gpu/passes/Scatter';
 import { impostorQuad, impostorRuntimeMaterial } from '../render/ImpostorRuntime';
 import { instanceVeg, updateVegViewPos, type RingFade } from '../render/VegInstance';
+import { depthPrepassTwin } from '../render/VegPrepass';
 import type { NF, NI, NU, NV3, NV4 } from '../gpu/TSLTypes';
 import type { VegLib } from './VegLibrary';
 
@@ -256,6 +257,9 @@ function crownProxyGeometry(d: CrownDims): BufferGeometry {
 
 export class Forests {
   readonly group = new Group();
+  /** depth twins render before color draws (renderOrder; kept in one child
+   *  group so a future bundle path can rely on traversal order too) */
+  private prepassGroup = new Group();
 
   private compact!: StorageBufferNode<'uint'>;
   private counters!: ReturnType<StorageBufferNode<'uint'>['toAtomic']>;
@@ -312,6 +316,7 @@ export class Forests {
 
   init(renderer: Renderer): void {
     void renderer;
+    this.group.add(this.prepassGroup);
     const lib = this.lib;
 
     // ---- compact regions / group tables ------------------------------------
@@ -350,6 +355,8 @@ export class Forests {
     const draws: DrawSpec[] = [];
     const meshes: Mesh[] = [];
 
+    const prepassQ = new URLSearchParams(window.location.search).get('prepass');
+    const noPrepass = prepassQ === '0' || prepassQ === 'grass';
     const addDraw = (
       geo: import('three').BufferGeometry,
       mat: MeshStandardNodeMaterial,
@@ -366,6 +373,30 @@ export class Forests {
         this.groupTris[g] += tris;
         mesh.castShadow = false;
         mesh.receiveShadow = true;
+        // depth prepass for CARD parts only: crowns shade 3-8x per covered
+        // pixel (alpha-tested cutouts defeat early-Z); opaque bark/rock
+        // overdraw is shallow and each twin costs a CPU draw (~29 us) +
+        // doubled vertex wind, so twinning everything LOST wall time.
+        // (A DoubleSide quad rasterizes each triangle ONCE — no duplicate
+        // face depth-ties; EQUAL is safe. Verified vs no-prepass at a
+        // frame-aligned capture: differences at the deterministic floor.)
+        if (!noPrepass && mat.alphaTest > 0) {
+          const matS = mat as unknown as {
+            positionNode: unknown;
+            maskNode: unknown;
+            opacityNode: unknown;
+          };
+          this.prepassGroup.add(
+            depthPrepassTwin(mesh, {
+              positionNode: matS.positionNode,
+              maskNode: matS.maskNode ?? undefined,
+              ...(mat.alphaTest > 0
+                ? { opacityNode: matS.opacityNode, alphaTest: mat.alphaTest }
+                : {}),
+              side: mat.side,
+            }),
+          );
+        }
       } else {
         // shadow-only caster: lives on the cascade's layer, so ONLY that
         // cascade's shadow camera ever renders it

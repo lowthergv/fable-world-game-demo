@@ -109,6 +109,28 @@ async function main(): Promise<void> {
     settleFrames,
   );
 
+  // --framealign N: settle further until stats.frame % 1024 === N. Pins the
+  // frame-indexed jitter phase (TRAA camera offsets, contact-shadow/cloud
+  // hash offsets) so two DIFFERENT builds produce bit-comparable captures —
+  // unaligned captures differ by ~20-27% of pixels from phase alone.
+  const fAlign = str(args['framealign']);
+  if (fAlign !== undefined) {
+    const target = ((Number(fAlign) % 1024) + 1024) % 1024;
+    await page.evaluate(
+      async (t) => {
+        const s = window.__laas;
+        if (!s.settle || !s.stats) return;
+        for (let guard = 0; guard < 1100; guard++) {
+          if (s.stats.frame % 1024 === t) break;
+          await s.settle(1);
+        }
+      },
+      target,
+    );
+    const at = await page.evaluate(() => window.__laas.stats?.frame ?? -1);
+    console.log(`[shoot] frame-aligned at ${at} (mod 1024 = ${at % 1024})`);
+  }
+
   // --gpusample N: poll GPU pass timings N times → median (timestamps are noisy)
   const gpuN = Number(str(args['gpusample']) ?? 0);
   if (gpuN > 0) {

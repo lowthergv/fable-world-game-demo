@@ -7,6 +7,7 @@
 import { ACESFilmicToneMapping, PerspectiveCamera, Scene } from 'three';
 import { TimestampQuery, WebGPURenderer } from 'three/webgpu';
 import { buildRequiredLimits } from './Diagnostics';
+import { installPositionInvariance } from '../render/VegPrepass';
 import { GpuProfiler } from './GpuProfiler';
 import type { EngineStats, LaasHooks } from './Hooks';
 import type { LaasParams } from './Params';
@@ -99,6 +100,9 @@ export class Engine {
     const engine = new Engine(renderer, params, hooks);
     engine.timestampsSupported = (hooks.diag?.features ?? []).includes('timestamp-query');
     if (engine.timestampsSupported) engine.profiler = new GpuProfiler(renderer);
+    // depth-prepass correctness (see VegPrepass): position math must land
+    // on identical depths across the depth-only and shaded pipelines
+    installPositionInvariance(renderer);
 
     window.addEventListener('resize', () => {
       engine.camera.aspect = window.innerWidth / window.innerHeight;
@@ -131,7 +135,12 @@ export class Engine {
     this.elapsed += dt;
     if (!this.params.freeze) this.worldTime += dt;
 
+    // CPU attribution (Phase 7): update = app-side per-frame work,
+    // submit = three render+encode (excl. GPU; backpressure shows as the
+    // gap between frameMs and cpu.update+cpu.submit)
+    const c0 = performance.now();
     for (const fn of this.updateFns) fn(dt, this.worldTime);
+    const c1 = performance.now();
 
     if (this.post) {
       this.post.meter(this.renderer); // exposure feedback from last frame's pass
@@ -139,6 +148,9 @@ export class Engine {
     } else {
       this.renderer.render(this.scene, this.camera);
     }
+    const c2 = performance.now();
+    this.stats.counters['cpu.updateMs100'] = Math.round((c1 - c0) * 100);
+    this.stats.counters['cpu.submitMs100'] = Math.round((c2 - c1) * 100);
     this.collectStats(rawDt);
 
     if (this.settleWaiters.length > 0) {

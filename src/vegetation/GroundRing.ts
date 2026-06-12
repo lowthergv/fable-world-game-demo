@@ -38,7 +38,6 @@ import {
   type StorageTexture,
 } from 'three/webgpu';
 import {
-  Discard,
   Fn,
   If,
   Return,
@@ -71,8 +70,9 @@ import {
 } from 'three/tsl';
 import { canopyAt, cellHash, cellHash2 } from '../gpu/passes/Scatter';
 import { grassTranslucency, rockMaterial } from '../render/VegMaterials';
+import { depthPrepassTwin } from '../render/VegPrepass';
 import { gustAt, windContext, windExposure, windU } from '../render/Wind';
-import type { NF, NI, NU, NV2, NV3, NV4 } from '../gpu/TSLTypes';
+import type { NB, NF, NI, NU, NV2, NV3, NV4 } from '../gpu/TSLTypes';
 import type { Heightfield } from '../world/Heightfield';
 import type { ProbeGI } from '../gpu/passes/ProbeGI';
 import { WORLD_SIZE } from '../world/WorldConst';
@@ -170,13 +170,19 @@ function bandFade(
     fadeOut !== null
       ? varying(float(1).sub(smoothstep(fadeOut - band, fadeOut + band, dist)))
       : null;
-  const prev = mat.colorNode as unknown as NV3 | null;
-  mat.colorNode = Fn(() => {
-    const ign = interleavedGradientNoise(screenCoordinate.xy);
-    if (inV) Discard(ign.lessThan(float(1).sub(inV)));
-    if (outV) Discard(ign.greaterThanEqual(outV));
-    return prev ?? vec3(1, 0, 1);
-  })();
+  if (!inV && !outV) return;
+  // maskNode (not colorNode Discards) so the depth-prepass twin can share
+  // the EXACT same draw condition — a depth-vs-color discard mismatch
+  // punches holes at the fade bands. Main pass only (carpets cast no
+  // shadows, so maskShadowNode never consults this).
+  const ign = interleavedGradientNoise(screenCoordinate.xy);
+  let cond: NB | null = null;
+  if (inV) cond = ign.greaterThanEqual(float(1).sub(inV)) as unknown as NB;
+  if (outV) {
+    const c2 = ign.lessThan(outV) as unknown as NB;
+    cond = cond ? ((cond as unknown as { and(o: NB): NB }).and(c2)) : c2;
+  }
+  mat.maskNode = cond as unknown as typeof mat.maskNode;
 }
 
 /** simple flat litter quad (5×7 cm), uv 0..1, normal up */
@@ -285,6 +291,8 @@ function tuftGeometry(W = 0.04): BufferGeometry {
 
 export class GroundRing {
   readonly group = new Group();
+  /** depth twins render before color draws (renderOrder; grouped) */
+  private prepassGroup = new Group();
   private kernels: object[] = [];
   private camU = uniform(new Vector3());
   private planesU = uniformArray(Array.from({ length: 6 }, () => new Vector4()));
@@ -329,6 +337,7 @@ export class GroundRing {
   }
 
   init(beechAtlas: DataTexture | null): void {
+    this.group.add(this.prepassGroup);
     const hf = this.hf;
     const salt = this.seed.sub('groundring') & 0x7fffffff;
     const camU = this.camU;
@@ -731,6 +740,20 @@ export class GroundRing {
       mesh.castShadow = false;
       mesh.receiveShadow = true;
       this.group.add(mesh);
+      // grass layers shade 2-8x per pixel without a prepass (random draw
+      // order defeats early-Z); twin shares geometry = same indirect slot
+      const noPrepass =
+        new URLSearchParams(window.location.search).get('prepass') === '0';
+      if (!noPrepass && (spec.g <= 2 || spec.g === 8)) {
+        const matS = spec.mat as unknown as { positionNode: unknown; maskNode: unknown };
+        this.prepassGroup.add(
+          depthPrepassTwin(mesh, {
+            positionNode: matS.positionNode,
+            maskNode: matS.maskNode ?? undefined,
+            side: DoubleSide,
+          }),
+        );
+      }
     }
     const indirectStore = storage(indirectAttr, 'uint', D * 5);
     const drawGroupBuf = storage(new StorageBufferAttribute(drawGroups, 1), 'uint', D);
