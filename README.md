@@ -12,13 +12,13 @@ LAAS is a fully procedural 4×4 km open world running in the browser on WebGPU: 
 
 The goal of this project is to test the capabilities of Claude Fable 5, Anthropic's newest model. This repository was built roughly 99% by the model, with minimal human steering:
 
-- The human partially wrote one document: [PROJECT_LAAS_v2.md](PROJECT_LAAS_v2.md) — the brief. It sets the visual bar (UE5-class reference frames), hard floors (triangle counts, system list, world size), and banned outcomes (black shadows, cloned trees, fog as cover). It deliberately does not say how to build any of it.
+- The human steers via the brief. The original, [PROJECT_LAAS_v2.md](PROJECT_LAAS_v2.md) (partially human-written), set the visual bar (UE5-class reference frames), hard floors (triangle counts, system list, world size), and banned outcomes (black shadows, cloned trees, fog as cover). Its successor, [PROJECT_LAAS_v3.md](PROJECT_LAAS_v3.md) — the current, binding brief — extends the experiment into a game: a wildlife-photography loop, a procedural fauna program, a fully synthesized soundscape, compute-shader ray tracing, and a bug/perf/roadmap discipline. v3 was drafted by the model from a structured interview of the human — the human made the design calls, the model wrote the spec. Neither brief says how to build any of it.
 - Everything else was planned and executed by Fable 5 across long autonomous sessions: the architecture, all engine and world systems, the verification tooling, the debugging, the working notes, and this README.
 - Human input is limited to rare feedback on the things a model cannot judge well from static output: whether motion effects feel right, whether interactive performance holds up, whether an artifact is visible while moving. Examples from the log: wind sway amplitude, walk-camera bob, cloud motion lagging the camera, water coverage taste.
 
 The model does its own QA. It boots the world headless (Playwright driving Chromium with a WebGPU/Metal adapter), takes screenshots, samples pixels, diffs frames against baselines with frame-aligned determinism, profiles GPU passes per encoder, and writes regression probes for the bugs it finds. The diagnosis logs, measurements, and decisions live in [STATUS.md](STATUS.md), which serves as the model's durable memory between sessions.
 
-Current state: about 21,000 lines of strict TypeScript across 90+ commits, all phases of the brief built, with an ongoing performance pass. Known open issues are tracked at the top of STATUS.md.
+Current state: about 21,000 lines of strict TypeScript across 90+ commits, all phases of the original (v2) brief built, with an ongoing performance pass. As of 2026-07-02 the project runs on the v3 brief — the game era. Known open issues are tracked at the top of STATUS.md.
 
 ## What is in the world
 
@@ -52,7 +52,8 @@ Useful URL parameters: `?seed=N` (world seed), `?T=hours` (time of day, 0–24),
 
 | Path | What it is |
 |---|---|
-| `PROJECT_LAAS_v2.md` | The brief. The only human-authored document in the repository. |
+| `PROJECT_LAAS_v3.md` | The brief (binding): the game era — fauna, photography loop, procedural audio, ray tracing, roadmap. Written by the model from a structured interview of the human. |
+| `PROJECT_LAAS_v2.md` | The original brief, superseded by v3 and kept as history. The only substantially human-authored document. |
 | `STATUS.md` | The model's working memory: current state, diagnosis logs, measurements, decision history. |
 | `docs/THREE-NOTES.md` | Verified three.js/TSL/WebGPU API notes the model accumulated against the pinned version. |
 | `docs/DELTA.md`, `docs/DEVIATIONS.md` | Reference-comparison loops per phase, and spec deviations with reasons. |

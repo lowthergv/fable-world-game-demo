@@ -1,7 +1,10 @@
 # DEVIATIONS — spec items replaced by nearest-feasible alternatives
 
-Per PROJECT_LAAS_v2.md: any infeasible/impractical spec item gets the closest
-feasible implementation plus an entry here explaining the gap.
+Per PROJECT_LAAS_v3.md (§3, clause inherited from v2): any infeasible/impractical
+spec item gets the closest feasible implementation plus an entry here explaining
+the gap. v3 also routes audio-synthesis fallbacks here (v3 §11): a sound that fails
+the blind lifelike gate may ship as a public-domain/CC0 recording with provenance
+logged in its entry.
 
 ## D-1: GTAO "indirect lighting only" (Phase 3)
 

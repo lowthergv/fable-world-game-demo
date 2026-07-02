@@ -1,7 +1,8 @@
 # PROJECT LAAS — STATUS (source of truth)
 
 > **Rehydration protocol** (for an agent resuming with no context): read this file fully, then
-> `PROJECT_LAAS_v2.md` (the spec — binding), then `docs/THREE-NOTES.md` (API gotchas for the
+> `PROJECT_LAAS_v3.md` (the spec — binding; supersedes v2, which stays as history), then
+> `docs/THREE-NOTES.md` (API gotchas for the
 > pinned three.js), then the **Current focus** section below. Reference images: `reference/`.
 > Never re-plan from scratch; continue from "Next actions". Update this file after every
 > meaningful step. Commit per milestone with descriptive messages.
@@ -16,6 +17,14 @@ vista w/ snow + cloud sea below summits — "Witcher" frame). 8 gated phases; ve
 Playwright screenshots compared against references; `DELTA.md` loop each phase. Must ALSO be
 smooth + explorable interactively by the user (fly camera, ToD control, bookmarks) — user
 feedback comes in chat; the two-frame test is the agent-side acceptance only.
+
+**GAME ERA (2026-07-02): `PROJECT_LAAS_v3.md` adopted, supersedes v2.** The world becomes a
+wildlife-photography game: fauna program (birds → aquatic → small mammals → ungulates, all
+procedural, photograph-bar quality gate), photo mode + album/field journal, landmarks/map/
+trails + journey intro, full procedural audio (blind lifelike gate), hybrid compute-shader RT
+(reflections first), K-list bug burndown, 120 fps base + toggleable quality tiers. Roadmap =
+milestones M1–M8 (v3 §14), stabilize-first; M1 absorbs the old Phase 7. v2's pillars, floors,
+and bans remain law via v3 §0/§5.
 
 ## Hard rules digest (full text = spec §)
 
@@ -195,6 +204,23 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
   castShadowPositionNode, instance NORMAL rotation (normalLocal.assign).
 
 ## Next actions (always keep current)
+
+- **V3 SPEC ADOPTED (2026-07-02, collaborative session).** `PROJECT_LAAS_v3.md` written via
+  structured interview with the user. Their calls, for the record: wildlife photography is
+  the core loop (album + field journal, NO scoring/quests for now); fauna = all four classes,
+  risk-ordered birds → trout → marmot/hare/fox → deer/ibex hero tier; journey-as-intro
+  (~15 min) + free-roam trail network; hybrid compute RT (reflections first — kills the lake
+  rim); perf contract = 120 fps base at native + console-toggleable RT/quality tiers that may
+  never alter base-tier pixels; audio = full procedural with a blind "sounds recorded" gate,
+  CC0 fallback per failed sound (audio ONLY — visual zero-assets law unchanged); realism pass
+  order: light&color → close-up → water → distance. All four seeded K-list bugs (v3 §6)
+  user-confirmed: K-1 far flicker, K-2 lake rim, K-3 blob rocks, K-4 LOD pop.
+  Pointers updated: STATUS rehydration header, README, DEVIATIONS header.
+  **NEXT UP: M1 — Stabilize & close v2 (v3 §14).** Order of attack: (1) build the
+  temporal-stability probe FIRST (K-1's measuring stick + regression guard for all later
+  TRAA/impostor work), (2) K-1…K-4, (3) queued perf (TRAA custom resolve, post merges,
+  cpu.submit/draw cuts), (4) `bench`/`demo` console commands, (5) v2 Phase-7 close-out
+  (bookmarks re-pose incl. bm7, 90 s flythrough, per-pass HUD, full battery, two-frame test).
 
 - **PHASE 7 PERF — CHOPPINESS ROOT-CAUSED AND FIXED (2026-07-02).** User
   report: "choppy fps" on the M1 Max. New probe (tools/probe-spikes.ts:
