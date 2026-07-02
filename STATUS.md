@@ -205,6 +205,41 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 
 ## Next actions (always keep current)
 
+- **M1 STARTED — TEMPORAL-STABILITY PROBE BUILT + K-1 ATTRIBUTED (2026-07-02).**
+  `tools/probe-temporal.ts` (v3 §12.1): records CONSECUTIVE frames in-page
+  (node-side screenshots skip ~15 frames — capture is drawImage→getImageData
+  after each settle(1), frame counter verified +1 per step), frame-aligned to
+  absolute frame anchors (rest @512, pan @800). Two modes: `rest` (frozen
+  world, wind 0, lockexp — residual per-frame change = frame-indexed effects
+  only) and `pan` (frame-locked yaw pan with EXACT constant-homography
+  reprojection onto the previous frame — pure rotation has no parallax/
+  disocclusion; absolute pan numbers carry a bilinear-resampling floor, use
+  them RELATIVELY). Metric: flicker energy = mean |Δluma|/pair (8-bit units)
+  per pixel + temporal std; outputs heatmap PNG, worst-48px-tile ranking,
+  histogram percentiles, metrics JSON (shots/wip/temporal/). Pass thresholds
+  (--maxmean/--maxtile) left uncalibrated until after the K-1 fix.
+  **K-1 BASELINE (bm3, T19, native 2592×1676): mean 0.998/255, p95 4.85,
+  4.85% of pixels >5/255 at REST.** Heatmap: dominant source = mid-distance
+  forest canopy (R2-ring band, saturated ≥8/255), secondary = clouds region,
+  far-massif rock speckle, and curious dotted-ring patterns (possibly probe-GI
+  refresh grid — attribute after the fix). ABLATION MATRIX (all rest, same
+  frame window): taa OFF 1.923/p95 12.87 (p50 collapses to 0.01 — statics are
+  bit-stable without jitter; raw content instability is 2× what ships);
+  shadowcache0 0.885; contact OFF 0.897; clouds OFF 0.930; ao OFF 1.128 and
+  water OFF 1.086 (both HIGHER — luminance/content confounds: ablations that
+  brighten or swap content inflate |Δ|; compare small deltas with care).
+  **CONCLUSION: no auxiliary system explains the canopy shimmer — the top
+  K-1 contributor is the STOCK TRAA RESOLVE at rest (varianceGamma=1.0 clips
+  converged history to each frame's momentary 3×3 stats → jitter-frequency
+  ping-pong on sub-pixel foliage; TRAANode.js:699). Cascade stagger and
+  contact hash are real but secondary (~0.1 mean each).** NEXT: custom TRAA
+  resolve (one component kills K-1's top term AND the queued 4.4 ms post
+  whale + 2 full-res copies/frame): rest-widened variance clip
+  (gamma motion→still ramp), Catmull-Rom history, ping-pong history targets,
+  keep the halton sequence + analytic-velocity seam EXACTLY (framealign law).
+  Gates: temporal probe ABAB rest+pan, HF-energy vs 4×SSAA (no softening),
+  judged shots at 3 bookmarks, perf ABAB.
+
 - **V3 SPEC ADOPTED (2026-07-02, collaborative session).** `PROJECT_LAAS_v3.md` written via
   structured interview with the user. Their calls, for the record: wildlife photography is
   the core loop (album + field journal, NO scoring/quests for now); fauna = all four classes,
