@@ -28,7 +28,9 @@ import { WaterSurface } from '../world/WaterSurface';
 import { PostStack } from '../render/PostStack';
 import { setupSunShadows } from '../render/ShadowSetup';
 import { Clouds } from '../sky/Clouds';
+import { DayCycle } from '../sky/DayCycle';
 import { SunSky } from '../sky/SunSky';
+import { Weather, WEATHER_STATES } from '../sky/Weather';
 import type { WorldContext } from './Scenes';
 
 export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
@@ -273,30 +275,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       con.print(`time → ${t.toFixed(2)}`);
     },
   });
-  if (froxels) {
-    const fx = froxels;
-    numCvar(
-      'fog',
-      'froxel fog density (default 0.4; ?fog=N at boot)',
-      () => fx.fogK.value,
-      (n) => {
-        fx.fogK.value = n;
-      },
-      0,
-      8,
-    );
-  }
   if (!ablate.has('wind') && hf.noiseA) {
-    numCvar(
-      'wind',
-      'wind strength (default 1; ?wind=N at boot)',
-      () => windU.strength.value,
-      (n) => {
-        windU.strength.value = n;
-      },
-      0,
-      5,
-    );
     numCvar(
       'winddir',
       'wind direction in degrees',
@@ -306,6 +285,122 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       },
       -360,
       360,
+    );
+  }
+
+  // ---- weather + day/night cycle (world-time driven: timescale composes,
+  // ?freeze=1 halts both — tooling shots stay deterministic) ------------------
+  // ?weather=clear|fair|overcast|fog|rain|storm|snow pins a state,
+  // ?weather=off disables the system (legacy knob behavior), default = auto
+  // cycling from 'fair'. ?daylen=minutes for a full 24 h day (0 = fixed
+  // time of day, default 30).
+  const qW = new URLSearchParams(window.location.search);
+  const wParam = qW.get('weather') ?? 'auto';
+  let weather: Weather | null = null;
+  if (wParam !== 'off') {
+    const initial = WEATHER_STATES[wParam] ? wParam : 'fair';
+    weather = new Weather(clouds, froxels, seed.rng('weather'), initial, wParam === 'auto');
+    // ?fog / ?wind boot overrides still win over the initial state
+    const fq = Number(qW.get('fog') ?? NaN);
+    if (Number.isFinite(fq)) {
+      weather.params.fog = fq;
+      weather.target.fog = fq;
+    }
+    const wq = Number(qW.get('wind') ?? NaN);
+    if (Number.isFinite(wq)) {
+      weather.params.wind = wq;
+      weather.target.wind = wq;
+    }
+    // overrides mutate params AFTER the constructor's apply — push them to
+    // the uniforms now (under ?freeze=1 update() never runs to do it)
+    weather.applyNow();
+    // the boot cloud-shadow bake ran before the weather state applied its
+    // coverage — re-bake once so frozen shots (?weather=storm&freeze=1)
+    // get shadows that match the deck (live runs re-bake every 2.5 s)
+    void clouds.refreshShadow(engine.renderer);
+  }
+  const dayMinutes = Number(qW.get('daylen') ?? 30);
+  const cycle = new DayCycle(sunSky, post, (Number.isFinite(dayMinutes) ? dayMinutes : 30) * 60);
+  const wRef = weather;
+  engine.onUpdate((dt) => {
+    if (engine.params.freeze) return;
+    wRef?.update(dt);
+    cycle.update(dt);
+  });
+
+  registerCommand({
+    name: 'weather',
+    help: 'weather: bare prints state; `weather storm` pins, `weather auto` cycles',
+    complete: () => [...Object.keys(WEATHER_STATES), 'auto'],
+    run: (args, con) => {
+      if (!wRef) {
+        con.print('weather system is off for this boot (?weather=off)', 'warn');
+        return;
+      }
+      if (!args[0]) {
+        con.print(wRef.describe(), 'dim');
+        return;
+      }
+      const w = args[0].toLowerCase();
+      if (w === 'auto') {
+        wRef.auto = true;
+        con.print('weather: auto cycling');
+        return;
+      }
+      if (!wRef.set(w)) {
+        con.print(`unknown state: ${w} (${Object.keys(WEATHER_STATES).join(' ')} | auto)`, 'err');
+        return;
+      }
+      wRef.auto = false;
+      con.print(`weather → ${w} (pinned; \`weather auto\` resumes cycling)`);
+    },
+  });
+  numCvar(
+    'daylength',
+    'real minutes per full 24 h day (0 = fixed time of day)',
+    () => cycle.daySeconds / 60,
+    (n) => {
+      cycle.daySeconds = n * 60;
+    },
+    0,
+    1440,
+  );
+  // fog/wind write through the weather state when it runs (so the value
+  // sticks until the next state change) and fall back to the raw uniforms
+  // under ?weather=off
+  if (froxels) {
+    const fx = froxels;
+    numCvar(
+      'fog',
+      'froxel fog density (weather owns this; setting pins until next state)',
+      () => (wRef ? wRef.params.fog : fx.fogK.value),
+      (n) => {
+        if (wRef) {
+          wRef.params.fog = n;
+          wRef.target.fog = n;
+        } else {
+          fx.fogK.value = n;
+        }
+      },
+      0,
+      8,
+    );
+  }
+  if (!ablate.has('wind') && hf.noiseA) {
+    numCvar(
+      'wind',
+      'wind strength (weather owns this; setting pins until next state)',
+      () => (wRef ? wRef.params.wind : windU.strength.value),
+      (n) => {
+        if (wRef) {
+          wRef.params.wind = n;
+          wRef.target.wind = n;
+        } else {
+          windU.strength.value = n;
+        }
+      },
+      0,
+      5,
     );
   }
   window.addEventListener('keydown', (e) => {

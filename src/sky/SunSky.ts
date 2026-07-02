@@ -83,7 +83,32 @@ export class SunSky {
     this.timeOfDay = t;
     SunSky.sunDirection(t, this.sunDirWorld);
     await this.atmosphere.setSun(this.sunDirWorld);
+    this.applySunState();
+    this.iblDirty = true;
+    await this.refreshIBL();
+  }
 
+  /**
+   * Continuous day-cycle path — everything cheap enough for every frame:
+   * sun direction/intensity/color + hemisphere (CPU math + uniform writes).
+   * The sky-view LUT rebake is queued only when `skyView` (caller strides
+   * it); the IBL rebake is marked dirty and left to refreshEnvironment().
+   */
+  setTimeOfDayFast(t: number, skyView: boolean): void {
+    this.timeOfDay = t;
+    SunSky.sunDirection(t, this.sunDirWorld);
+    this.atmosphere.setSunDirOnly(this.sunDirWorld);
+    if (skyView) this.atmosphere.rebakeSkyView();
+    this.applySunState();
+    this.iblDirty = true;
+  }
+
+  /** strided env-map (PMREM) refresh for the day cycle */
+  async refreshEnvironment(): Promise<void> {
+    await this.refreshIBL();
+  }
+
+  private applySunState(): void {
     const [tr, tg, tb] = this.atmosphere.sunTransmittanceCpu(this.sunDirWorld);
     const lum = 0.2126 * tr + 0.7152 * tg + 0.0722 * tb;
     const above = Math.max(0, Math.min(1, (this.sunDirWorld.y + 0.03) / 0.06));
@@ -108,9 +133,6 @@ export class SunSky {
       0.33 + 0.08 * warm,
       0.26,
     );
-
-    this.iblDirty = true;
-    await this.refreshIBL();
   }
 
   /** probe GI active: hemisphere becomes a small safety floor only */

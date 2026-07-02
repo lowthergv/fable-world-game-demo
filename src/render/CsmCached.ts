@@ -36,6 +36,15 @@ import type { Camera, Light, Object3D } from 'three/webgpu';
 // texels are 1–10 m — still sub-texel, per the original cadence rationale.
 const PERIODS = [1, 2, 4, 8];
 const PHASES = [0, 1, 2, 4];
+/**
+ * Sun-motion gate: a single-frame direction change past this (unit-vector
+ * distance², ≈0.8°) is a DISCRETE edit (console `time`, bookmark ToD) →
+ * every cascade refreshes at once. Below it (continuous day cycle: ~0.004°/
+ * frame at the default day length) cascades adopt the current sun at their
+ * own scheduled refresh — light pose + map stay frozen together in between,
+ * so nothing swims; the far cascade lags the sun ≤ 8 frames = sub-texel.
+ */
+const SUN_JUMP_SQ = 2e-4;
 /** fraction of the cascade span the fit center may drift before a forced refresh */
 const DRIFT_FRAC = 0.04;
 
@@ -96,10 +105,10 @@ export class CachedCsmShadowNode extends CSMShadowNode {
     }
 
     _lightDirection.subVectors(light.target.position, light.position).normalize();
-    if (_lightDirection.distanceToSquared(this.lastSunDir) > 1e-10) {
-      this.lastSunDir.copy(_lightDirection);
+    if (_lightDirection.distanceToSquared(this.lastSunDir) > SUN_JUMP_SQ) {
       this.invalidate();
     }
+    this.lastSunDir.copy(_lightDirection);
 
     // frustum-shape changes (sprint FOV kick, resize races) refit cascades —
     // CSM extents derive from the camera frustum and would silently go stale

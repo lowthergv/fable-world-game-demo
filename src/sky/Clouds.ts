@@ -244,7 +244,14 @@ export class Clouds {
     const wUv = xz.div(WEATHER_WORLD).add(0.5).fract();
     // contrast-stretch: raw fbm hovers near 0.5 — dense cores + clear lanes
     const weather = smoothstep(0.3, 0.78, texture(this.weatherMap, wUv, 0).x);
-    const cov = clamp(weather.sub(float(1).sub(float(this.coverage))), 0, 1).mul(2.2);
+    // overcast floor: the weather field's clear lanes are hard zeros, so no
+    // threshold shift alone can close the deck — above coverage 0.7 a floor
+    // ramps in and fills the lanes (storm 1.0 → solid). Zero at ≤0.7:
+    // the verified fair-weather look (0.62) is bit-identical.
+    const overcast = float(this.coverage).mul(2).sub(1.4).clamp(0, 1);
+    const cov = clamp(weather.sub(float(1).sub(float(this.coverage))), 0, 1)
+      .max(overcast)
+      .mul(2.2);
     const base = texture3D(this.baseNoise, vec3(xz.x, wp.y, xz.y).div(3600).fract(), 0).x;
     let dens = clamp(base.mul(cov).sub(float(0.32).mul(hNorm.add(0.45))), 0, 1).mul(inLayer);
     if (detail) {
@@ -313,7 +320,13 @@ export class Clouds {
     };
     // isotropic floor ≈ multiple scattering (clouds are never phase-black)
     const phase = hg(g1).mul(0.75).add(hg(g2).mul(0.25)).add(0.14);
-    const sunT = this.atmosphere.sampleTransmittance(float(6360.35), clamp(sunDir.y, -1, 1));
+    // above-horizon gate, same ramp as the sun DirectionalLight: below the
+    // horizon the transmittance LUT edge is deep red and lit the deck like
+    // embers at midnight (surfaced by the continuous day cycle)
+    const sunUp = clamp(sunDir.y.add(0.03).div(0.06), 0, 1);
+    const sunT = this.atmosphere
+      .sampleTransmittance(float(6360.35), clamp(sunDir.y, -1, 1))
+      .mul(sunUp);
 
     If(valid, () => {
       Loop(STEPS, ({ i: si }: { readonly i: NI }) => {

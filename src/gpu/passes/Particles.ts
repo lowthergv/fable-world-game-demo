@@ -49,6 +49,7 @@ import { WORLD_SIZE } from '../../world/WorldConst';
 import { canopyAt } from './Scatter';
 import type { ProbeGI } from './ProbeGI';
 import { gustAt, windContext, windU } from '../../render/Wind';
+import { weatherU } from '../../sky/Weather';
 
 export const PARTICLE_COUNT = 131072;
 const BOX_R = 36; // m, horizontal half-extent around the camera
@@ -57,6 +58,8 @@ const BOX_H = 24; // m, vertical half-extent
 const T_POLLEN = 0;
 const T_SNOW = 1;
 const T_LEAF = 2;
+const T_RAIN = 3;
+const RAIN_FALL = 8.5; // m/s nominal fall speed (streaks align to this)
 
 export class Particles {
   readonly mesh: InstancedMesh;
@@ -75,15 +78,23 @@ export class Particles {
     const biomeTex = hf.biomeTex;
     if (!biomeTex) throw new Error('particles need the biome texture');
 
-    const rollType = (p: NV3, h: NF): NF => {
+    const rollType = (p: NV3, h: NF, r: NF): NF => {
       const uvW = clamp(p.xz.div(WORLD_SIZE).add(0.5), 0, 1);
       const snow = (texture(biomeTex, uvW, 0) as unknown as NV4).y;
       const cov = canopyTex ? canopyAt(canopyTex, p.xz) : (float(0) as NF);
       const isSnow = snow.greaterThan(0.35);
       const leafRoll = h.lessThan(0.45).and(cov.greaterThan(0.3));
-      return isSnow.select(
+      const env = isSnow.select(
         float(T_SNOW),
         leafRoll.select(float(T_LEAF), float(T_POLLEN)),
+      );
+      // weather precipitation overrides the environment roll (r = its own
+      // hash — independent of the altitude-band roll): rain thins under
+      // canopy (crowns shelter), weather-snow falls in every biome
+      const rainP = (weatherU.rain as unknown as NF).mul(float(1).sub(cov.mul(0.75)));
+      return r.lessThan(rainP).select(
+        float(T_RAIN),
+        r.lessThan(weatherU.snow as unknown as NF).select(float(T_SNOW), env),
       );
     };
 
@@ -106,10 +117,17 @@ export class Particles {
       const phase = M.x.mul(6.2832);
       const swirlA = time.mul(M.x.mul(1.4).add(1.1)).add(phase);
       const isSnow = ty.greaterThan(T_SNOW - 0.5).and(ty.lessThan(T_SNOW + 0.5));
-      const isLeaf = ty.greaterThan(T_LEAF - 0.5);
-      // horizontal: shared wind + per-type swirl
-      const windK = isLeaf.select(float(1.4), isSnow.select(float(1.1), float(0.8)));
-      const swirlR = isLeaf.select(float(0.8), isSnow.select(float(0.35), float(0.22)));
+      const isLeaf = ty.greaterThan(T_LEAF - 0.5).and(ty.lessThan(T_LEAF + 0.5));
+      const isRain = ty.greaterThan(T_RAIN - 0.5);
+      // horizontal: shared wind + per-type swirl (rain: carried, no swirl)
+      const windK = isRain.select(
+        float(0.55),
+        isLeaf.select(float(1.4), isSnow.select(float(1.1), float(0.8))),
+      );
+      const swirlR = isRain.select(
+        float(0),
+        isLeaf.select(float(0.8), isSnow.select(float(0.35), float(0.22))),
+      );
       const vx = d.x
         .mul(strength)
         .mul(windK)
@@ -120,12 +138,16 @@ export class Particles {
         .mul(windK)
         .mul(2.2)
         .add(swirlA.sin().mul(swirlR));
-      // vertical: snow settles, leaves flutter down, pollen rides updrafts
-      const vy = isSnow.select(
-        float(-0.9).add(swirlA.mul(1.7).sin().mul(0.18)),
-        isLeaf.select(
-          float(-0.55).add(swirlA.mul(2.3).sin().mul(0.3)),
-          swirlA.mul(0.7).sin().mul(0.14).add(gust.sub(0.5).mul(0.25)),
+      // vertical: rain falls hard, snow settles, leaves flutter down,
+      // pollen rides updrafts
+      const vy = isRain.select(
+        float(-RAIN_FALL).add(M.x.mul(-2.0)),
+        isSnow.select(
+          float(-0.9).add(swirlA.mul(1.7).sin().mul(0.18)),
+          isLeaf.select(
+            float(-0.55).add(swirlA.mul(2.3).sin().mul(0.3)),
+            swirlA.mul(0.7).sin().mul(0.14).add(gust.sub(0.5).mul(0.25)),
+          ),
         ),
       );
       p.addAssign(vec3(vx, vy, vz).mul(this.uDt as unknown as NF));
@@ -155,7 +177,13 @@ export class Particles {
         p.assign(np);
         // altitude band 0..1 of the box → type environment roll
         const hBand = np.y.sub(g2).div(60).clamp(0, 1);
-        ty.assign(rollType(np, hash13(np.mul(0.71)).mul(0.4).add(hBand.mul(0.6))));
+        ty.assign(
+          rollType(
+            np,
+            hash13(np.mul(0.71)).mul(0.4).add(hBand.mul(0.6)),
+            hash13(np.mul(5.13)),
+          ),
+        );
         age.assign(0);
         misc.element(i).assign(
           vec4(
@@ -184,7 +212,8 @@ export class Particles {
     const M = misc.element(instanceIndex) as unknown as NV4;
     const ty = P.w;
     const isSnowR = ty.greaterThan(T_SNOW - 0.5).and(ty.lessThan(T_SNOW + 0.5));
-    const isLeafR = ty.greaterThan(T_LEAF - 0.5);
+    const isLeafR = ty.greaterThan(T_LEAF - 0.5).and(ty.lessThan(T_LEAF + 0.5));
+    const isRainR = ty.greaterThan(T_RAIN - 0.5);
     const sizeM = isLeafR.select(
       M.y.mul(0.05).add(0.045),
       isSnowR.select(M.y.mul(0.025).add(0.025), M.y.mul(0.007).add(0.006)),
@@ -199,13 +228,30 @@ export class Particles {
     const ly = positionLocal.x.mul(sa).add(positionLocal.y.mul(ca)).mul(sizeM);
     const right = vec3(this.uCamRight);
     const up = vec3(this.uCamUp);
-    mat.positionNode = P.xyz.add(right.mul(lx)).add(up.mul(ly));
+    const quadPos = P.xyz.add(right.mul(lx)).add(up.mul(ly));
+    // rain renders as a streak: thin along camera-right, stretched along
+    // the (wind-tilted) fall direction the kinematics actually use.
+    // Sizes are game-exaggerated (real drops are invisible): ~1.2 cm ×
+    // 15–30 cm reads as rain at typical framing distances (the ?partdbg=3
+    // census proved physically-sized streaks vanish completely).
+    const rainDrift = vec2(windU.dir as unknown as NV2).mul(
+      (windU.strength as unknown as NF).mul(0.55 * 2.2),
+    );
+    const fallDir = vec3(rainDrift.x, -RAIN_FALL, rainDrift.y).normalize();
+    const rainLen = M.y.mul(0.15).add(0.15);
+    const rainPos = P.xyz
+      .add(right.mul(positionLocal.x.mul(0.012)))
+      .add(fallDir.mul(positionLocal.y.mul(rainLen)));
+    mat.positionNode = isRainR.select(rainPos, quadPos);
 
     // fade-in after respawn, fade-out near end of life
     const lifeK = smoothstep(0, 0.6, M.z).mul(smoothstep(0, 1.5, M.w.sub(M.z)));
     const r2c = uv().sub(0.5).length().mul(2);
     const soft = smoothstep(1, isLeafR.select(float(0.75), float(0.25)), r2c);
-    const aK = isLeafR.select(float(1), isSnowR.select(float(0.95), float(0.5)));
+    const aK = isRainR.select(
+      float(0.55),
+      isLeafR.select(float(1), isSnowR.select(float(0.95), float(0.5))),
+    );
     mat.opacityNode = soft.mul(lifeK).mul(aK);
 
     const leafTint = mix(
@@ -213,13 +259,31 @@ export class Particles {
       vec3(0.45, 0.3, 0.08),
       fract(M.x.mul(7.31)),
     );
-    mat.colorNode = isLeafR.select(
-      leafTint,
-      isSnowR.select(vec3(0.85, 0.87, 0.92), vec3(0.7, 0.66, 0.5)),
+    mat.colorNode = isRainR.select(
+      vec3(0.68, 0.73, 0.82),
+      isLeafR.select(
+        leafTint,
+        isSnowR.select(vec3(0.85, 0.87, 0.92), vec3(0.7, 0.66, 0.5)),
+      ),
     );
     // ?partdbg=1 — oversized red emissive quads (pipeline-vs-tuning bisect);
-    // ?partdbg=2 — analytic camera ring, sim buffers bypassed (data-vs-draw)
+    // ?partdbg=2 — analytic camera ring, sim buffers bypassed (data-vs-draw);
+    // ?partdbg=3 — type census: emissive quads colored by TYPE (pollen
+    // green, snow white, leaf red, rain blue) — does the weather roll land?
     const pdbg = new URLSearchParams(window.location.search).get('partdbg');
+    if (pdbg === '3') {
+      mat.positionNode = P.xyz
+        .add(right.mul(positionLocal.x.mul(0.12)))
+        .add(up.mul(positionLocal.y.mul(0.12)));
+      mat.colorNode = vec3(0, 0, 0);
+      mat.emissiveNode = isRainR.select(
+        vec3(0, 0, 40),
+        isLeafR.select(vec3(40, 0, 0), isSnowR.select(vec3(40, 40, 40), vec3(0, 40, 0))),
+      );
+      mat.opacityNode = float(1);
+      mat.transparent = false;
+      mat.depthWrite = true;
+    }
     if (pdbg === '1' || pdbg === '2') {
       const center =
         pdbg === '2'

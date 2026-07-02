@@ -254,6 +254,65 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
   flythrough interplay) and releases pointer lock; close discards
   pending input. README updated.
 
+- **WEATHER + CONTINUOUS DAY/NIGHT CYCLE (2026-07-02, user feature ask).**
+  - DAY CYCLE (src/sky/DayCycle.ts): ToD advances on WORLD time (composes
+    with `timescale`, halts under ?freeze=1 — tooling deterministic).
+    Default 30 real-min/day; ?daylen=N minutes (0 = off), console
+    `daylength`. Cost-tiered continuous path: EVERY FRAME sun dir/
+    intensity/color + hemisphere + grade (SunSky.setTimeOfDayFast /
+    applySunState refactor; Atmosphere.setSunDirOnly); sky-view LUT rebake
+    strided 0.02 game-h (rebakeSkyView, no await); IBL/PMREM strided
+    0.1 game-h (refreshEnvironment). Probe GI needs NO invalidate (<1 s
+    slice refresh tracks the sun); cloud shadow rides its 2.5 s bake.
+    Discrete jumps (console `time`, bookmarks) keep the full path.
+  - CSM SUN-JUMP GATE (CsmCached): full invalidate only on a single-frame
+    sun-dir delta² > 2e-4 (≈0.8°); below it each cascade adopts the
+    current sun at ITS scheduled refresh (pose+map still freeze together
+    → no swim; ≤8-frame far-cascade lag = sub-texel at sane day rates).
+    ABAB in-session (bm1, user viewport): daylen 30 vs static
+    50.3/50.1 ms p50; daylen 1 EXTREME vs static 32.8/33.2 — the cycle
+    costs ~nothing. (Cross-boot A/Bs that afternoon read 2× — THERMAL,
+    the methodology note stands.)
+  - WEATHER (src/sky/Weather.ts): states {clear fair overcast fog rain
+    storm snow} lerp (exp τ=14 world-s) cloud coverage+density, froxel
+    fogK, windU.strength, and precipitation uniforms (weatherU — module
+    pattern like windU). Seeded auto-Markov wander (rng stream 'weather',
+    dwell 3–8 game-min; snow manual-only). `fair` == the verified art
+    baseline EXACTLY: default-boot framealign diff vs pre-feature =
+    0.07% (deterministic floor). Console `weather <state|auto>`; fog/wind
+    cvars write through weather (stick until next state); ?weather=
+    pins, ?weather=off = legacy direct knobs. Boot overrides re-apply
+    post-constructor + one cloud-shadow re-bake (frozen boots never run
+    update()).
+  - OVERCAST FLOOR (Clouds.sampleDensity): the baked weather field's
+    clear lanes are HARD ZEROS — no coverage threshold closes the deck;
+    coverage > 0.7 now ramps a lane-filling floor (storm 1.0 → solid).
+    ≤ 0.7 is bit-identical (default 0.62 untouched).
+  - RAIN PARTICLES (Particles.ts): T_RAIN type — weather roll with canopy
+    shelter ×(1−0.75·cov), falls −8.5..−10.5 m/s wind-carried, streak
+    billboards along the wind-tilted fall dir, GAME-EXAGGERATED
+    1.2 cm × 15–30 cm @ α 0.55 (physically-sized streaks are invisible).
+    Global snow via weatherU.snow. NEW DEBUG ?partdbg=3 = TYPE CENSUS
+    (emissive quads colored by type: pollen green/snow white/leaf red/
+    rain blue) — proved the roll worked and visibility was the problem.
+    Type-band fix: isLeaf checks were open-ended (>T_LEAF−0.5) — rain(3)
+    would have classed as leaf.
+  - NIGHT CLOUD EMBERS FIXED (pre-existing, surfaced by the cycle): the
+    cloud march sampled sun transmittance at NEGATIVE sun elevation →
+    LUT edge deep-red → midnight ember deck. Sun term now gated by the
+    same above-horizon ramp as the sun light. Residual faint red horizon
+    afterglow at deep night = the sun-elevation floor (−0.085) in
+    SunSky.sunDirection — reads as lingering dusk, left as-is.
+  - **?shot=N WALK-SNAP BUG FIXED (pre-existing, affects OLD NUMBERS):**
+    the default-spawn branch set initialPoseMode='walk'; installBookmarks
+    overwrote only the pose → every ?shot=N boot WALK-SNAPPED to ground.
+    bm3/bm9 "vista" measurements in this file were actually GROUND-LEVEL
+    framings — re-baseline before comparing. Bookmarks now set
+    initialPoseMode='fly' per the programmatic-pose contract.
+  - Probes: tools/probe-weather.ts (cycle rate + pacing asserts, 4-state
+    transition asserts driven through the console). Shots:
+    shots/wip/{weather-*,storm-final,night-clouds2,daycycle-*}.png.
+
 - **USER DETOUR COMPLETE (2026-06-14, commit e790e07): WALK MODE +
   SPAWN + MINIMAL HUD.** FlyCamera is now a walk/fly rig — walk is the
   interactive default (spawn = first dry low-slope spot from map center,

@@ -161,6 +161,10 @@ export function installBookmarks(
     const b = BOOKMARKS[params.shot - 1];
     if (b) {
       hooks.initialPose = { p: [b.x, poseY(hf, b), b.z], yaw: b.yaw, pitch: b.pitch };
+      // the default-spawn branch set 'walk' before us — a bookmark is a
+      // programmatic pose and keeps FLY semantics (walk-snap silently
+      // dropped high bookmarks like bm3's 250 m vista to the ground)
+      hooks.initialPoseMode = 'fly';
     }
   }
 }

@@ -339,6 +339,19 @@ export class Atmosphere {
     }
   }
 
+  /** move the sun uniform only — LUT untouched (continuous day cycle: the
+   *  direction must track every frame; the sky-view rebake is strided) */
+  setSunDirOnly(dir: Vector3): void {
+    this.sunDir.value.copy(dir).normalize();
+  }
+
+  /** queue a sky-view LUT rebake this frame (no await — day-cycle stride) */
+  rebakeSkyView(): void {
+    if (this.renderer && this.skyCompute) {
+      this.renderer.compute(this.skyCompute as Parameters<Renderer['compute']>[0]);
+    }
+  }
+
   /** sample the sky-view LUT for an arbitrary world direction */
   skyColor(dir: NV3): NV3 {
     const elev = asin(clamp(dir.y, -1, 1));
