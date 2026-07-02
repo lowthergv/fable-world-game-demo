@@ -234,6 +234,51 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
   (bake into battery + `--maxmean/--maxtile`). USER CONFIRM outstanding
   (fly camera live look — K-list rule).
 
+- **K-4 INSTRUMENTED — POP PROBE BUILT (2026-07-02, commit c384700).**
+  `tools/probe-pops.ts` (v3 §12.2): deterministic flythrough (Bookmarks now
+  exposes `__laasDbg.flyPose(u)` — the live flythrough integrates wall dt and
+  is NOT headless-reproducible), per-32px-tile sustained-step detector scored
+  against each tile's own motion noise (MAD floor), run at `--slow 4`
+  (quarter speed): transitions are path-POSITION-driven, so real ring swaps
+  keep full step magnitude while arrival/parallax shrink 4× (raw detections
+  15004→1228 on the descent segment). Online detection + quarter-res frame
+  ring → every event saves a before|at|after crop strip (self-triaging).
+  LIMITS (documented): water must stay `--ablate water` (wall-clock ripples
+  flood the detector — lake segments produced ~90% of raw events); near
+  LATERAL content at high optical flow is un-probeable without depth — the
+  user's free-flight confirm covers that slice. Event taxonomy so far:
+  jump≈sustained = instant swap (the K-4 target), jump≫sustained =
+  single-frame transient (cascade/firefly class), jump≪sustained = fast
+  crossfade ramp. Full-tour acceptance run in flight; band re-tune next.
+  Threshold calibration for probe-temporal continues at bm9.
+
+- **K-3 FIXED AT ASSET LEVEL (2026-07-02, commit 7082c4f) — PENDING USER CONFIRM.**
+  StoneM 'cobble'→'fieldstone' (new preset: strata + worn facets + creases +
+  grain; detail 2→3), StoneS detail 1→2, 'boulder' preset surface-geology
+  bump (silhouette stays rounded — streambed art preserved, bm1/bm6 judged
+  clean), rockMaterial fine mineral mottle (~12 cm octave; existing tint/
+  grain wavelengths were constant across a 0.5–1 m stone → uniform gray
+  vinyl). Gallery gained a fieldstone exhibit row at WORLD detail+scale
+  (shots/wip/k3/gallery-fieldstone2.png — the K-3 review surface); bm4
+  before/after in shots/wip/k3/. bm4 15.1M tris / 722 draws — tri delta
+  bounded (+960/StoneM R1 instance). NOTE: rockMaterial mottle touches ALL
+  rocks (hero/cliff included) — judged improvement, macro-meso-micro law;
+  re-judge at the Phase-7 contact sheet.
+
+- **K-2 NOT REPRODUCIBLE IN CURRENT BUILD (2026-07-02) — PENDING USER CONFIRM.**
+  bm2 grazing shots at T 7.5/12/15/18.5, 1728×1117 AND native 2592×1676
+  (shots/wip/k2/): no far-rim black stripe, no white tent-row shards, no
+  faceted swells at any time. The 2026-06-12 fix stack (GTAO bilateral-
+  collapse fallback + water fresnel flatten + horizon-tested SSR fallback +
+  crowned-horizon occlusion) collectively killed the visible symptoms; the
+  K-2 seed report predates user play on THIS build. Discipline: K-2 closes
+  only when the user confirms live (their viewport, in motion). If they
+  still see it: next documented step is the ?waterdbg=5 thick-channel rerun
+  with ?lockexp=1 at T=12 (STATUS 2026-06-12 bm2 entry); the structural
+  kill remains RT-1 (M2). TOOLING FIX en route: explicit ?T now overrides a
+  ?shot bookmark's composed ToD (was silently ignored — pose × ToD sweeps
+  were impossible; Params.timeOfDayExplicit).
+
 - **M1 STARTED — TEMPORAL-STABILITY PROBE BUILT + K-1 ATTRIBUTED (2026-07-02).**
   `tools/probe-temporal.ts` (v3 §12.1): records CONSECUTIVE frames in-page
   (node-side screenshots skip ~15 frames — capture is drawImage→getImageData
