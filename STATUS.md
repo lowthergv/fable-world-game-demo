@@ -196,6 +196,38 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 
 ## Next actions (always keep current)
 
+- **PHASE 7 PERF — CHOPPINESS ROOT-CAUSED AND FIXED (2026-07-02).** User
+  report: "choppy fps" on the M1 Max. New probe (tools/probe-spikes.ts:
+  boots unfrozen, records per-frame dt via engine.onUpdate, reports
+  percentiles + spike cadence) showed a metronomic hitch: EVERY 3rd frame
+  ran 83–100 ms (exact 8.33 ms vsync multiples) vs a 41.7 ms median at
+  bm4 user-viewport — p95 91.7 ms. NOT the CSM stagger (persisted with
+  ?shadowcache=0). ROOT CAUSE: `trackTimestamp: true` + the per-frame
+  `resolveTimestampsAsync` pair in Engine — timestamp writes on ~100
+  passes/frame plus the query-resolve/readback serialized the pipeline
+  every ~3 frames. FIX: profiling is now OPT-IN (`?prof=1`, implied by
+  `?hud=1`); tools/launch.ts laasUrl() always appends prof=1 so the whole
+  measurement harness is unchanged (pass extra prof='0' to measure the
+  no-profiler wall). HUD without prof shows a reload hint. RESULT (bm4,
+  2592×1676, ABAB): p95 91.7 → 50.0 ms, max 100 → 50.5, spikes/15 s
+  65 → ZERO; bm1 mean 27.2 max 34.3. Median unchanged (GPU raster is
+  untouched) — the 120 fps directive still needs the queued GPU/CPU cuts.
+  ALSO LANDED (same session):
+  - STATIC-MATRIX SWEEP (CPU ROUND 2 item b — DONE): main.ts freezes
+    matrixAutoUpdate on every mesh/points/group after scene build (world
+    transforms live in instance buffers / positionNode; movers = lights
+    only, which stay auto). Anything moved later must call updateMatrix().
+  - CASCADE RE-STAGGER: PERIODS [1,2,3,6]→[1,2,4,8], PHASES
+    [0,1,2,5]→[0,1,2,4] — the period-3 c2 landed on c1's odd frames half
+    the time and every 6th frame rendered c0+c1+c2+c3 together (frame-time
+    sawtooth); powers-of-two phases are disjoint: max TWO cascade renders
+    per frame. c2/c3 latency 3/6→4/8 frames = still sub-texel (far content
+    rigid). VERIFIED frame-aligned vs ?shadowcache=0 ground truth: 0.05%
+    pixels >12/255, mean delta 0.76 (below the ≤0.2% deterministic floor).
+  - Measurement note for future sessions: any wall-time comparison against
+    pre-2026-07-02 numbers must account for prof overhead — old interactive
+    numbers INCLUDED the timestamp serialization hitches.
+
 - **USER DETOUR COMPLETE (2026-06-14, commit e790e07): WALK MODE +
   SPAWN + MINIMAL HUD.** FlyCamera is now a walk/fly rig — walk is the
   interactive default (spawn = first dry low-slope spot from map center,

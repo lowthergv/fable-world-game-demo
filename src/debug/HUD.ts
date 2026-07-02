@@ -81,7 +81,9 @@ export class Hud {
       `LAAS  seed=${this.params.seed} scene=${this.params.scene} T=${this.params.timeOfDay}`,
       `${s.fps.toFixed(0)} fps  ${s.frameMs.toFixed(2)} ms (p95 ${s.frameMsP95.toFixed(2)})`,
       `draws ${fmt(s.drawCalls)}  tris ${fmt(s.triangles)}`,
-      `gpu render ${s.gpuPasses['render']?.toFixed(2) ?? '–'} ms  compute ${s.gpuPasses['compute']?.toFixed(2) ?? '–'} ms`,
+      this.params.prof
+        ? `gpu render ${s.gpuPasses['render']?.toFixed(2) ?? '–'} ms  compute ${s.gpuPasses['compute']?.toFixed(2) ?? '–'} ms`
+        : 'gpu timings off — reload with ?prof=1',
       `cam ${c.x.toFixed(1)}, ${c.y.toFixed(1)}, ${c.z.toFixed(1)}`,
     ];
     // per-pass GPU attribution (spec §6 HUD requirement; Phase 7 perf)

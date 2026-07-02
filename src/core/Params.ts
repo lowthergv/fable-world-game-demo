@@ -21,6 +21,10 @@ export interface LaasParams {
   freeze: boolean;
   /** device pixel ratio cap override */
   dpr: number | null;
+  /** per-pass GPU timestamps on (?prof=1; implied by ?hud=1) — timestamp
+   *  writes + per-frame query resolves cost real frame time, so interactive
+   *  runs default OFF */
+  prof: boolean;
 }
 
 function num(v: string | null, fallback: number): number {
@@ -46,6 +50,7 @@ export function parseParams(search: string = window.location.search): LaasParams
     shot: shotN >= 1 && shotN <= 9 ? Math.floor(shotN) : null,
     freeze: q.get('freeze') === '1',
     dpr: q.get('dpr') !== null ? num(q.get('dpr'), 1) : null,
+    prof: q.get('prof') === '1' || q.get('hud') === '1',
   };
 }
 

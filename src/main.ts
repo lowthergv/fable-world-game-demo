@@ -73,6 +73,21 @@ async function boot(): Promise<void> {
   };
   await buildScene(params.scene, ctx);
 
+  // Static-matrix sweep (Phase 7 perf, STATUS "CPU ROUND 2" item b): every
+  // world mesh/group is transform-static — placement lives in instance
+  // buffers and positionNode shaders — yet updateMatrixWorld() recomposed
+  // ~0.7 ms of identical matrices per frame. Freeze meshes/points/groups;
+  // lights and their plain-Object3D targets stay auto (sun moves on ToD
+  // edits, cascade lights re-fit on refresh). Anything moved later must
+  // call updateMatrix() explicitly.
+  engine.scene.traverse((o) => {
+    const t = o as { isMesh?: boolean; isPoints?: boolean; isGroup?: boolean };
+    if (t.isMesh || t.isPoints || t.isGroup) {
+      o.updateMatrix();
+      o.matrixAutoUpdate = false;
+    }
+  });
+
   // terrain probe first — walk mode + fly soft-collision depend on it
   if (hooks.groundProbe) fly.groundProbe = hooks.groundProbe;
   if (params.cam !== null) {

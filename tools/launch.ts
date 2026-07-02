@@ -105,6 +105,10 @@ export function laasUrl(opts: LaasPageOptions, base = 'http://localhost:5173/'):
   if (opts.preset) q.set('preset', opts.preset);
   q.set('hud', opts.hud ? '1' : '0');
   if (opts.freeze !== false) q.set('freeze', '1');
+  // tooling measures per-pass GPU timings — profiling stays on for every
+  // harness boot (interactive default is OFF since 2026-07-02; ?prof=1);
+  // pass extra.prof='0' to measure the no-profiler wall time
+  q.set('prof', '1');
   for (const [k, v] of Object.entries(opts.extra ?? {})) q.set(k, v);
   return `${base}?${q.toString()}`;
 }

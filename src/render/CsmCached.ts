@@ -26,8 +26,16 @@ import { CSMFrustum } from 'three/addons/csm/CSMFrustum.js';
 import { CSMShadowNode } from 'three/addons/csm/CSMShadowNode.js';
 import type { Camera, Light, Object3D } from 'three/webgpu';
 
-const PERIODS = [1, 2, 3, 6];
-const PHASES = [0, 1, 2, 5];
+// Powers-of-two periods with disjoint phases: c1 refreshes on odd frames,
+// c2 on n≡2 (mod 4), c3 on n≡4 (mod 8) — never more than TWO cascade
+// renders on any frame. The old [1,2,3,6]/[0,1,2,5] stagger piled c1+c2+c3
+// onto the same frame every 6th frame (period-3 c2 lands on odd and even
+// frames alternately — a 3-cycle can't stay disjoint from a 2-cycle), which
+// read as a visible frame-time sawtooth. c2 3→4 and c3 6→8 frame latency:
+// far-cascade content is rigid (wind fades by ~480 m, impostors rigid) and
+// texels are 1–10 m — still sub-texel, per the original cadence rationale.
+const PERIODS = [1, 2, 4, 8];
+const PHASES = [0, 1, 2, 4];
 /** fraction of the cascade span the fit center may drift before a forced refresh */
 const DRIFT_FRAC = 0.04;
 
