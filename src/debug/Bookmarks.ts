@@ -127,6 +127,30 @@ export function installBookmarks(
     fly.toggle();
   }
 
+  // tooling: pure tour-pose sampler (u ∈ [0,1]) — the pop probe drives the
+  // SAME path deterministically via setPose + settle(1) (the live flythrough
+  // integrates wall dt, which headless stepping can't reproduce)
+  const tourCurve = new CatmullRomCurve3(
+    TOUR.map((w) => new Vector3(w.x, poseY(hf, { ...w, tod: 0, name: '' } as Bookmark), w.z)),
+    false,
+    'centripetal',
+    0.5,
+  );
+  const flyPose = (u01: number): { p: [number, number, number]; yaw: number; pitch: number } => {
+    const u = Math.min(Math.max(u01, 0), 1);
+    const p = tourCurve.getPointAt(u);
+    const seg = u * (TOUR.length - 1);
+    const i0 = Math.min(Math.floor(seg), TOUR.length - 2);
+    const f = seg - i0;
+    const w0 = TOUR[i0];
+    const w1 = TOUR[i0 + 1];
+    const yaw = w0 && w1 ? w0.yaw + (w1.yaw - w0.yaw) * f : 0;
+    const pitch = w0 && w1 ? w0.pitch + (w1.pitch - w0.pitch) * f : 0;
+    return { p: [p.x, p.y, p.z], yaw, pitch };
+  };
+  const dbg = (window as unknown as { __laasDbg?: Record<string, unknown> });
+  dbg.__laasDbg = { ...(dbg.__laasDbg ?? {}), flyPose };
+
   // console: `shot N` mirrors keys 1-9, `flythrough` mirrors F
   registerCommand({
     name: 'shot',
