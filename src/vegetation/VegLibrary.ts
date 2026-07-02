@@ -458,15 +458,18 @@ export async function buildVegLibrary(
   progress(0.93, 'veg: stone/branch pools');
   const stoneClasses: {
     cls: number;
-    preset: 'boulder' | 'cobble';
+    preset: 'boulder' | 'cobble' | 'fieldstone';
     d1: number;
     d2: number | null;
     moss: number;
     maxDist: number;
   }[] = [
     { cls: VegClass.StoneL, preset: 'boulder', d1: 3, d2: 2, moss: 0.22, maxDist: 900 },
-    { cls: VegClass.StoneM, preset: 'cobble', d1: 2, d2: 1, moss: 0.12, maxDist: 280 },
-    { cls: VegClass.StoneS, preset: 'cobble', d1: 1, d2: null, moss: 0.06, maxDist: 90 },
+    // K-3: StoneM was 'cobble' d1 2 — smooth gray blobs at meadow scale
+    // (bm4 foreground). Fieldstone preset + one detail level so the strata/
+    // facet field has vertices to land on (320→1280 tris R1).
+    { cls: VegClass.StoneM, preset: 'fieldstone', d1: 3, d2: 2, moss: 0.12, maxDist: 280 },
+    { cls: VegClass.StoneS, preset: 'cobble', d1: 2, d2: null, moss: 0.06, maxDist: 90 },
   ];
   for (const sc of stoneClasses) {
     for (let v = 0; v < 4; v++) {

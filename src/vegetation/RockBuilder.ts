@@ -41,10 +41,15 @@ export const ROCK_PRESETS = {
     macro: 0.38, strata: 0.16, strataFreq: 3.1, strataTilt: 0.3,
     ridged: 0.17, cuts: 8, cutBite: 0.34, micro: 0.022,
   },
+  // K-3 (blob rocks): rounded SILHOUETTE kept (streambed/moist-floor stones
+  // are water-worn) but the surface carries geology — strata banding (also
+  // feeds vdata.y albedo bands), creases, worn small-bite facets, grain.
+  // The old values (strata .045/ridged .05/cuts 2×.1/micro .012) read as a
+  // featureless gray dome at 0.5–2 m in meadow foregrounds (bm4).
   boulder: {
     radius: 1.1, squash: [1, 0.74, 0.92] as [number, number, number],
-    macro: 0.24, strata: 0.045, strataFreq: 3.2, strataTilt: 0.2,
-    ridged: 0.05, cuts: 2, cutBite: 0.1, micro: 0.012,
+    macro: 0.3, strata: 0.11, strataFreq: 4.4, strataTilt: 0.2,
+    ridged: 0.12, cuts: 4, cutBite: 0.22, micro: 0.03,
   },
   angular: {
     radius: 0.85, squash: [1, 0.85, 0.95] as [number, number, number],
@@ -60,6 +65,15 @@ export const ROCK_PRESETS = {
     radius: 0.16, squash: [1, 0.72, 0.88] as [number, number, number],
     macro: 0.14, strata: 0, strataFreq: 1, strataTilt: 0,
     ridged: 0.02, cuts: 0, cutBite: 0, micro: 0.01,
+  },
+  // K-3: weathered meadow fieldstone (StoneM) — the 'cobble' preset at
+  // 0.2–0.6 m read as smooth gray blobs (river-rounded pebble shape only
+  // belongs ≤ ~0.2 m / in beds). Strata + worn facets + grain at a rounded
+  // overall form: glacial-erratic character, silhouette survives close-ups.
+  fieldstone: {
+    radius: 0.16, squash: [1, 0.7, 0.9] as [number, number, number],
+    macro: 0.26, strata: 0.1, strataFreq: 5.0, strataTilt: 0.3,
+    ridged: 0.13, cuts: 5, cutBite: 0.26, micro: 0.03,
   },
   cliffFace: {
     radius: 3.0, squash: [1, 1.7, 0.5] as [number, number, number],

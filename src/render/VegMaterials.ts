@@ -141,6 +141,10 @@ export function rockMaterial(opts?: {
   // band tint: alternating warm/cool sediment layers + grain
   const bandTint = valueNoise3(vec3(float(0), strataT.mul(7.3), float(0)).add(wp.mul(0.02)));
   const grain = fbm3(wp.mul(2.1), 3).mul(0.5).add(0.5);
+  // fine mineral mottle (~12 cm): the existing tint/grain wavelengths
+  // (50 m / 0.5 m) are constant across a 0.5–1 m stone — meadow fieldstones
+  // read as uniform gray vinyl at close range without it (K-3)
+  const fineGrain = fbm3(wp.mul(8.5), 2).mul(0.5).add(0.5);
   // mid-gray default: the old near-black tone (0.21/0.165/0.12 peak) was
   // darker than ANY ground splat — boulders read as alien dark blobs on
   // pale dry soil (user feedback). Moss + canopy shade still darken
@@ -164,6 +168,7 @@ export function rockMaterial(opts?: {
     .mul(smoothstep(0.45, 0.8, steep))
     .mul(0.55);
   albedo = mix(albedo, albedo.mul(vec3(0.5, 0.46, 0.4)), streak) as unknown as NV3;
+  albedo = albedo.mul(fineGrain.mul(0.26).add(0.87)) as unknown as NV3;
   const mossAmt = opts?.moss ?? 0.25;
   if (mossAmt > 0) {
     const mossN = smoothstep(0.45, 0.75, fbm3(wp.mul(1.7), 3).mul(0.5).add(0.5));

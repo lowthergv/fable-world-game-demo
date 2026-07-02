@@ -257,13 +257,15 @@ export async function buildGalleryScene(ctx: WorldContext): Promise<void> {
     z: number,
     moss: number,
     label?: string,
+    scale = 1,
   ): void => {
     const rock = buildRock(preset, seed.rng(`rock/${preset}/${seedTag}`), detail);
     rockTris += rock.stats.tris;
     const m = new Mesh(rock.geometry, rockMaterial({ moss }));
+    m.scale.setScalar(scale);
     // settle into the ground a bit
     const bs = rock.geometry.boundingSphere;
-    m.position.set(x, bs ? bs.radius * 0.52 : 1, z);
+    m.position.set(x, bs ? bs.radius * scale * 0.52 : 1, z);
     m.rotation.y = seed.rng(`rockrot/${preset}/${seedTag}`).float() * Math.PI * 2;
     m.castShadow = true;
     m.receiveShadow = true;
@@ -283,6 +285,13 @@ export async function buildGalleryScene(ctx: WorldContext): Promise<void> {
     addRock('cobble', 3, String(i), 28 + r.float() * 5 - 2.5, RZ + r.float() * 4 - 2, 0.12);
   }
   exhibit(28, RZ, 'Cobbles', 'water-rounded');
+  // K-3 review: StoneM meadow fieldstones at WORLD detail (3) and world
+  // scale (0.2–0.6 m ⇒ ×1.5–3.5 on the 0.16 m base) — the bm4-foreground
+  // read is judged here first
+  for (let i = 0; i < 3; i++) {
+    addRock('fieldstone', 3, String(i), 34 + i * 2.2, RZ - 6, 0.12,
+      i === 0 ? 'Fieldstones ×3 (StoneM, world detail)' : undefined, 1.8 + i * 0.9);
+  }
   // rock wall: stacked slabs
   for (let row = 0; row < 3; row++) {
     for (let col = 0; col < 4; col++) {
