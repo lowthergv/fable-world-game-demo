@@ -29,6 +29,9 @@ export class Engine {
   worldTime = 0;
   /** wall-clock elapsed (sec) since start */
   elapsed = 0;
+  /** console `timescale` — scales the dt every updateFn receives and the
+   *  worldTime advance (slow-mo / speed-up); stats stay wall-clock */
+  timeScale = 1;
 
   /** when set, the frame loop renders through this instead of renderer.render */
   post: { render(): void; meter(renderer: WebGPURenderer): void } | null = null;
@@ -139,7 +142,9 @@ export class Engine {
     const t = timeMs / 1000;
     const rawDt = this.lastT === null ? 1 / 60 : t - this.lastT;
     this.lastT = t;
-    const dt = Math.min(Math.max(rawDt, 0), 0.1);
+    // scaled AFTER the pause-clamp, re-capped so timescale 10 can't feed a
+    // 1 s step into walk physics / particle integration
+    const dt = Math.min(Math.min(Math.max(rawDt, 0), 0.1) * this.timeScale, 0.25);
     this.elapsed += dt;
     if (!this.params.freeze) this.worldTime += dt;
 

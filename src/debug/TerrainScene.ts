@@ -8,6 +8,7 @@
  */
 
 import { BOOKMARKS, installBookmarks } from './Bookmarks';
+import { numCvar, registerCommand } from './Console';
 import { Froxels } from '../gpu/passes/Froxels';
 import { PARTICLE_COUNT, Particles } from '../gpu/passes/Particles';
 import { ProbeGI } from '../gpu/passes/ProbeGI';
@@ -247,6 +248,66 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
       post.setTimeOfDay(t);
     })();
   };
+
+  // ---- console knobs (world scene) — see debug/Console.ts -------------------
+  registerCommand({
+    name: 'time',
+    help: 'time of day 0-24: `time` prints, `time 18:30` / `time 6.5` / `time +2` sets',
+    run: (args, con) => {
+      if (args.length === 0) {
+        con.print(`time = ${sunSky.timeOfDay.toFixed(2)} (0-24 h; [ and ] step ±0.5)`, 'dim');
+        return;
+      }
+      const raw = args[0] ?? '';
+      const m = /^([+-])?(\d+(?:\.\d+)?)(?::([0-5]?\d))?$/.exec(raw);
+      if (!m) {
+        con.print('usage: time [hours | hh:mm | +N | -N]', 'err');
+        return;
+      }
+      const mag = Number(m[2]) + (m[3] ? Number(m[3]) / 60 : 0);
+      const t =
+        m[1] === undefined
+          ? Math.min(24, Math.max(0, mag))
+          : (((sunSky.timeOfDay + (m[1] === '-' ? -mag : mag)) % 24) + 24) % 24;
+      ctx.hooks.setTimeOfDay?.(t);
+      con.print(`time → ${t.toFixed(2)}`);
+    },
+  });
+  if (froxels) {
+    const fx = froxels;
+    numCvar(
+      'fog',
+      'froxel fog density (default 0.4; ?fog=N at boot)',
+      () => fx.fogK.value,
+      (n) => {
+        fx.fogK.value = n;
+      },
+      0,
+      8,
+    );
+  }
+  if (!ablate.has('wind') && hf.noiseA) {
+    numCvar(
+      'wind',
+      'wind strength (default 1; ?wind=N at boot)',
+      () => windU.strength.value,
+      (n) => {
+        windU.strength.value = n;
+      },
+      0,
+      5,
+    );
+    numCvar(
+      'winddir',
+      'wind direction in degrees',
+      () => (Math.atan2(windU.dir.value.y, windU.dir.value.x) * 180) / Math.PI,
+      (deg) => {
+        windU.dir.value.set(Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180));
+      },
+      -360,
+      360,
+    );
+  }
   window.addEventListener('keydown', (e) => {
     if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
       void clouds.refreshShadow(engine.renderer);

@@ -61,6 +61,8 @@ export class FlyCamera {
   /** base FLY speed in m/s, scroll-scaled (walk speeds are fixed) */
   speed = 24;
   enabled = true;
+  /** console `noclip` — fly mode ignores the terrain/water soft floor */
+  noclip = false;
   /** terrain probe — walk mode is unavailable until the scene installs it */
   groundProbe: GroundProbe | null = null;
 
@@ -242,6 +244,17 @@ export class FlyCamera {
     this.camera.updateMatrixWorld();
   }
 
+  /** console `fov` — sets the persistent base FOV (sprint kick composes on top) */
+  setFov(fovDeg: number): void {
+    this.baseFov = fovDeg;
+    this.camera.fov = fovDeg + this.fovKick;
+    this.camera.updateProjectionMatrix();
+  }
+
+  getFov(): number {
+    return this.baseFov;
+  }
+
   getPose(): CamPose {
     // walk mode reports the LOGICAL pose — bob/dip offsets stripped
     const p = this.modeV === 'walk' ? this.basePos : this.camera.position;
@@ -312,7 +325,7 @@ export class FlyCamera {
 
     // soft ground collision + underwater guard (no underwater rendering:
     // the refraction texture is garbage from below — hold above the water)
-    if (this.groundProbe) {
+    if (this.groundProbe && !this.noclip) {
       const c = this.camera.position;
       const g = this.groundProbe(c.x, c.z);
       const floor = Math.max(g.ground + FLY_GROUND_CLEAR, g.water + WADE_CLEAR);

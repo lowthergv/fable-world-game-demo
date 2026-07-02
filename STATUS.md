@@ -228,6 +228,32 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
     pre-2026-07-02 numbers must account for prof overhead — old interactive
     numbers INCLUDED the timestamp serialization hitches.
 
+- **DEVELOPER CONSOLE LANDED (2026-07-02, user-requested — "a console
+  similar to the Source engine so I can noclip and alter time scale /
+  time of day").** src/debug/Console.ts: backquote drop-down overlay,
+  MODULE-LEVEL command registry (registerCommand / registerCvar /
+  numCvar / boolCvar — the ConVar pattern: any system contributes its
+  own knobs, before or after the UI exists), Tab completion (commands +
+  per-command arg completers), ↑/↓ history persisted to localStorage,
+  `;` chaining, quoted args. Input handling: stopPropagation on the
+  input keeps EVERY window-level game hotkey (WASD/V/F/1-9/[ ]/F3) from
+  firing while typing — verified by probe. Core commands (Console.ts):
+  help/find/clear/echo, noclip (fly + collision off — new
+  FlyCamera.noclip skips the soft floor), fly/walk, speed, setpos/getpos
+  (accepts a pasted ?cam= string), fov (new FlyCamera.setFov — CsmCached
+  refits via its fov check), timescale 0.05-10 (new Engine.timeScale —
+  scales updateFn dt + worldTime, re-capped at 0.25 s so ×10 can't feed
+  1 s steps into walk physics; water's wall-clock TSL time is the known
+  exception, same as ?freeze), freeze, stat, hud, dpr (runtime
+  setPixelRatio + synthetic resize — post RTs and cascade refits follow;
+  verified error-free 0.5→1.5), quit. Scene commands: time (hh:mm /
+  decimal / ±relative → hooks.setTimeOfDay) + fog + wind + winddir in
+  TerrainScene; shot 1-9 + flythrough in Bookmarks. E2E probe:
+  tools/probe-console.ts (12 checks incl. input isolation + history +
+  completion). Console open disables the fly rig (restores prior state —
+  flythrough interplay) and releases pointer lock; close discards
+  pending input. README updated.
+
 - **USER DETOUR COMPLETE (2026-06-14, commit e790e07): WALK MODE +
   SPAWN + MINIMAL HUD.** FlyCamera is now a walk/fly rig — walk is the
   interactive default (spawn = first dry low-slope spot from map center,

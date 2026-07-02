@@ -13,6 +13,7 @@ import { FlyCamera } from './core/FlyCamera';
 import { initHooks } from './core/Hooks';
 import { parseCamString, parseParams } from './core/Params';
 import { WorldSeed } from './core/Seed';
+import { DevConsole } from './debug/Console';
 import { Hud } from './debug/HUD';
 import { buildGalleryScene } from './debug/GalleryScene';
 import { buildSanityScene } from './debug/SanityScene';
@@ -104,6 +105,9 @@ async function boot(): Promise<void> {
   }
 
   new Hud(engine, params);
+  // Source-style developer console (backquote) — scenes registered their
+  // commands into the module registry while building
+  new DevConsole(engine, fly);
 
   hooks.setPose = (p) => fly.setPose(p);
   hooks.getPose = () => fly.getPose();

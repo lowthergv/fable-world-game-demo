@@ -101,7 +101,7 @@ export class Hud {
       for (const k of counterKeys.sort()) lines.push(`${k}: ${fmt(s.counters[k] ?? 0)}`);
     }
     for (const p of this.providers) lines.push('—', ...p());
-    lines.push('—', 'F3 hud · V walk/fly · 1-9 bookmarks · F flythrough · P pose');
+    lines.push('—', 'F3 hud · ` console · V walk/fly · 1-9 bookmarks · F flythrough · P pose');
     this.el.textContent = lines.join('\n');
   }
 }

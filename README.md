@@ -40,9 +40,11 @@ npm run dev
 
 Open `http://localhost:5173` in Google Chrome 113 or newer on a desktop or laptop. Other Chromium-based browsers (Edge, Brave, Arc, Opera) should work too. Safari and Firefox are not supported — the engine is built and tested against Chrome's WebGPU implementation, and the page detects this before loading and says so. Mobile and tablet browsers get a notice recommending a computer. There is no WebGL fallback by design: if Chrome is present but WebGPU is unavailable, the page fails loudly with diagnostics and the exact things to check (hardware acceleration, `chrome://gpu`, browser version).
 
-Controls: click to capture the mouse. WASD to move, Shift to sprint, Space to jump, V toggles walk/fly, mouse wheel sets fly speed, E/Q move vertically in fly mode. Keys 1–9 jump to composed bookmarks, F starts the flythrough, F3 opens the debug HUD with per-pass GPU timings, P prints the current camera pose as a `?cam=` string.
+Controls: click to capture the mouse. WASD to move, Shift to sprint, Space to jump, V toggles walk/fly, mouse wheel sets fly speed, E/Q move vertically in fly mode. Keys 1–9 jump to composed bookmarks, F starts the flythrough, F3 opens the debug HUD (add `?prof=1` for per-pass GPU timings), P prints the current camera pose as a `?cam=` string.
 
-Useful URL parameters: `?seed=N` (world seed), `?T=hours` (time of day, 0–24), `?shot=1..9` (boot into a bookmark), `?cam=x,y,z,yaw,pitch[,fov]` (exact pose), `?preset=low|high|ultra`, `?freeze=1` (freeze world motion), `?hud=1` (HUD open at boot).
+The backquote key (`` ` ``) drops down a Source-style developer console: `help` lists commands, Tab completes, ↑/↓ recall history. Highlights: `noclip`, `timescale 0.25`, `time 19` (or `time +2`, `time 6:30`), `setpos x y z`, `shot 1..9`, `fog`, `wind`, `fov`, `speed`, `freeze`, `dpr`, `stat`. Any system can register commands via `registerCommand`/`registerCvar` in `src/debug/Console.ts`.
+
+Useful URL parameters: `?seed=N` (world seed), `?T=hours` (time of day, 0–24), `?shot=1..9` (boot into a bookmark), `?cam=x,y,z,yaw,pitch[,fov]` (exact pose), `?preset=low|high|ultra`, `?freeze=1` (freeze world motion), `?hud=1` (HUD open at boot), `?prof=1` (per-pass GPU timestamps — off by default; the profiling itself costs frame time).
 
 ## Repository map
 

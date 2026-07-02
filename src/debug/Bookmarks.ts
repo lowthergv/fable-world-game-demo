@@ -15,6 +15,7 @@ import type { Engine } from '../core/Engine';
 import type { LaasHooks } from '../core/Hooks';
 import type { LaasParams } from '../core/Params';
 import type { Heightfield } from '../world/Heightfield';
+import { registerCommand } from './Console';
 
 export interface Bookmark {
   name: string;
@@ -125,6 +126,34 @@ export function installBookmarks(
   if (new URLSearchParams(window.location.search).get('fly') === '1') {
     fly.toggle();
   }
+
+  // console: `shot N` mirrors keys 1-9, `flythrough` mirrors F
+  registerCommand({
+    name: 'shot',
+    help: 'jump to a composed bookmark 1-9 (`shot` lists them)',
+    complete: () => BOOKMARKS.map((_, i) => String(i + 1)),
+    run: (args, con) => {
+      if (!args[0]) {
+        BOOKMARKS.forEach((b, i) => con.print(`  ${i + 1}  ${b.name}  (T ${b.tod})`, 'dim'));
+        return;
+      }
+      const n = Number(args[0]);
+      if (!Number.isInteger(n) || n < 1 || n > BOOKMARKS.length) {
+        con.print(`usage: shot 1-${BOOKMARKS.length}`, 'err');
+        return;
+      }
+      apply(n - 1);
+      con.print(`→ ${BOOKMARKS[n - 1]?.name ?? ''}`);
+    },
+  });
+  registerCommand({
+    name: 'flythrough',
+    help: 'toggle the 92 s cinematic tour (key F)',
+    run: (_a, con) => {
+      fly.toggle();
+      con.print('flythrough toggled');
+    },
+  });
 
   // boot directly into a bookmark (?shot=N) — pose via initialPose (the
   // fly rig applies it after this scene finishes building)
