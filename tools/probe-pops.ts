@@ -252,8 +252,13 @@ function pageScript(opts: {
           jump: J, sustained: S, score,
         };
         events.push(ev);
+        // crop budget goes to the TOP-scored events, not the earliest
         if (crops.length < 24) {
           crops.push({ ...ev, png: cropStrip(t, tx, ty) });
+        } else {
+          let mi = 0;
+          for (let k = 1; k < crops.length; k++) if (crops[k].score < crops[mi].score) mi = k;
+          if (ev.score > crops[mi].score) crops[mi] = { ...ev, png: cropStrip(t, tx, ty) };
         }
       }
     }
