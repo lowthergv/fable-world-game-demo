@@ -54,6 +54,7 @@ import { GradeUniforms, gradeParamsAt } from './ColorScript';
 import { runiform } from '../gpu/RenderUniform';
 import { gtaoLayer } from './Gtao';
 import { HalfResMrtNode, type HalfResEntry } from './HalfResMrt';
+import { traaResolve } from './TraaResolve';
 
 export class PostStack {
   readonly post: RenderPipeline;
@@ -504,9 +505,19 @@ export class PostStack {
     const velLoad = (texel: NV2): NV4 =>
       vec4(velReproject(texel), 0, 1) as unknown as NV4;
     const reprojectedVelocity = { load: velLoad } as unknown as typeof depthTex;
+    // custom resolve (TraaResolve.ts): rest-widened variance clip (K-1),
+    // Catmull-Rom history, ping-pong targets. ?traa=stock boots the old
+    // three TRAANode for A/B (same jitter sequence — framealign-comparable).
     const taaed = ablate.has('taa')
       ? (withBounce as unknown as ReturnType<typeof traa>)
-      : traa(withBounce, depthTex, reprojectedVelocity, camera);
+      : q.get('traa') === 'stock'
+        ? traa(withBounce, depthTex, reprojectedVelocity, camera)
+        : (traaResolve(
+            withBounce,
+            depthTex as unknown as Parameters<typeof traaResolve>[1],
+            reprojectedVelocity as unknown as Parameters<typeof traaResolve>[2],
+            camera,
+          ) as unknown as ReturnType<typeof traa>);
 
     // --- bloom -----------------------------------------------------------------------
     const taaedRgb = (taaed as unknown as NV4).rgb;
