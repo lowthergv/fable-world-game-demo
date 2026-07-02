@@ -84,6 +84,66 @@ export function installBookmarks(
     { x: 1500, z: 1900, alt: 250, yaw: 0.65 + Math.PI * 2, pitch: -0.18 },
   ];
 
+  /**
+   * Clearance-enforced tour curve. The raw waypoint spline crossed terrain
+   * (u≈0.41 −28 m, u≈0.70 −146 m through the karst ridge — probe-clearance)
+   * and clipped tree crowns at lakeshore/forest-edge spans; the live
+   * flythrough only survived via the fly rig's soft ground clamp, which
+   * skimmed the camera through canopy (whole-frame flashes in probe-pops).
+   * Rebuild: sample the raw spline arc-uniformly, clamp each sample to
+   * ground/water + 22 m (crowns reach ~20 m), but blend back to the
+   * AUTHORED altitude near waypoints — the composed low moments (gorge
+   * 6 m, forest edge 8 m, dawn lake 12 m) keep their framing and the
+   * approach reads as a swoop.
+   */
+  const buildTourCurve = (): CatmullRomCurve3 => {
+    const raw = new CatmullRomCurve3(
+      TOUR.map((w) => new Vector3(w.x, poseY(hf, { ...w, tod: 0, name: '' } as Bookmark), w.z)),
+      false,
+      'centripetal',
+      0.5,
+    );
+    // arc-length parameter of each waypoint (uniform t → arc u)
+    const L = raw.getLength();
+    const lengths = raw.getLengths(400);
+    const tToArcU = (t: number): number => {
+      const idx = Math.min(399, Math.max(0, Math.round(t * 400)));
+      return (lengths[idx] ?? 0) / L;
+    };
+    const wpU = TOUR.map((_w, j) => tToArcU(j / (TOUR.length - 1)));
+    // clamp with headroom above the visual margin (22 m): the rebuilt
+    // spline undershoots between control points on concave terrain, and
+    // ridges spike between samples — two passes + neighborhood floor keep
+    // the delivered clearance ≥ ~20 m everywhere off-waypoint
+    const CLEAR = 28;
+    const M = 320;
+    const floorAt = (c: CatmullRomCurve3, u: number): number => {
+      let fl = -Infinity;
+      for (const du of [-1 / M / 2, 0, 1 / M / 2]) {
+        const q = c.getPointAt(Math.min(1, Math.max(0, u + du)));
+        fl = Math.max(fl, hf.heightAtCpu(q.x, q.z), hf.waterYAtCpu(q.x, q.z));
+      }
+      return fl;
+    };
+    const clampPass = (c: CatmullRomCurve3): CatmullRomCurve3 => {
+      const pts: Vector3[] = [];
+      for (let i = 0; i <= M; i++) {
+        const u = i / M;
+        const p = c.getPointAt(u);
+        // nearest waypoint in arc-u; keep authored Y within ±0.015 (~110 m)
+        let dNear = 1;
+        for (const wu of wpU) dNear = Math.min(dNear, Math.abs(u - wu));
+        let k = Math.max(0, 1 - dNear / 0.015);
+        k = k * k * (3 - 2 * k);
+        const clamped = Math.max(p.y, floorAt(c, u) + CLEAR);
+        pts.push(new Vector3(p.x, clamped * (1 - k) + p.y * k, p.z));
+      }
+      return new CatmullRomCurve3(pts, false, 'centripetal', 0.5);
+    };
+    return clampPass(clampPass(raw));
+  };
+  const tourCurve = buildTourCurve();
+
   class Flythrough {
     private active = false;
     private t = 0;
@@ -93,12 +153,7 @@ export function installBookmarks(
       this.active = !this.active;
       hooks.flyCamEnabled?.(!this.active);
       if (this.active && !this.curve) {
-        this.curve = new CatmullRomCurve3(
-          TOUR.map((w) => new Vector3(w.x, poseY(hf, { ...w, tod: 0, name: '' } as Bookmark), w.z)),
-          false,
-          'centripetal',
-          0.5,
-        );
+        this.curve = tourCurve;
       }
       if (!this.active) this.t = 0;
     }
@@ -130,12 +185,6 @@ export function installBookmarks(
   // tooling: pure tour-pose sampler (u ∈ [0,1]) — the pop probe drives the
   // SAME path deterministically via setPose + settle(1) (the live flythrough
   // integrates wall dt, which headless stepping can't reproduce)
-  const tourCurve = new CatmullRomCurve3(
-    TOUR.map((w) => new Vector3(w.x, poseY(hf, { ...w, tod: 0, name: '' } as Bookmark), w.z)),
-    false,
-    'centripetal',
-    0.5,
-  );
   const flyPose = (u01: number): { p: [number, number, number]; yaw: number; pitch: number } => {
     const u = Math.min(Math.max(u01, 0), 1);
     const p = tourCurve.getPointAt(u);

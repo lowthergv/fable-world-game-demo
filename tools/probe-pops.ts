@@ -82,6 +82,8 @@ interface PopResult {
   rawDetections: number;
   /** first ≤24 events with before/at/after crop strips (data URLs) */
   crops: (PopEvent & { png: string })[];
+  /** whole-frame steps (camera-through-canopy, sun reveal, global change) */
+  flashes: { frame: number; u: number; tiles: number; meanS: number }[];
 }
 
 function pageScript(opts: {
@@ -141,6 +143,7 @@ function pageScript(opts: {
   const med = (a) => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)] ?? 0; };
   const events = [];
   const crops = [];
+  const flashes = [];
   let raw = 0;
   const B = 2; // border tiles excluded
   const lastEventAt = new Int32Array(nT).fill(-1000);
@@ -221,6 +224,7 @@ function pageScript(opts: {
     // online detection at center t = f − K
     const t = f - K;
     if (t < K) continue;
+    const frameHits = [];
     for (let ty = B; ty < th - B; ty++) {
       for (let tx = B; tx < tw - B; tx++) {
         const i = ty * tw + tx;
@@ -244,29 +248,43 @@ function pageScript(opts: {
         const score = S / (mad + 0.5);
         if (score < O.scoreThresh) continue;
         raw++;
-        if (t - lastEventAt[i] <= K) { lastEventAt[i] = t; continue; }
-        lastEventAt[i] = t;
-        const ev = {
-          frame: t, u: O.u0 + t * du,
-          cx: Math.round((tx + 0.5) * TQ * 4), cy: Math.round((ty + 0.5) * TQ * 4),
-          jump: J, sustained: S, score,
-        };
-        events.push(ev);
-        // crop budget goes to the TOP-scored events, not the earliest
-        if (crops.length < 24) {
-          crops.push({ ...ev, png: cropStrip(t, tx, ty) });
-        } else {
-          let mi = 0;
-          for (let k = 1; k < crops.length; k++) if (crops[k].score < crops[mi].score) mi = k;
-          if (ev.score > crops[mi].score) crops[mi] = { ...ev, png: cropStrip(t, tx, ty) };
-        }
+        frameHits.push({ i, tx, ty, J, S, score });
+      }
+    }
+    // whole-frame FLASH (camera through canopy, sun reveal, global change):
+    // >2% of interior tiles stepping together isn't a tile-local pop —
+    // record once, keep the tile-event stream clean
+    const interior = (tw - 2 * B) * (th - 2 * B);
+    if (frameHits.length > interior * 0.02) {
+      flashes.push({
+        frame: t, u: O.u0 + t * du, tiles: frameHits.length,
+        meanS: frameHits.reduce((s, h) => s + h.S, 0) / frameHits.length,
+      });
+      continue;
+    }
+    for (const h of frameHits) {
+      if (t - lastEventAt[h.i] <= K) { lastEventAt[h.i] = t; continue; }
+      lastEventAt[h.i] = t;
+      const ev = {
+        frame: t, u: O.u0 + t * du,
+        cx: Math.round((h.tx + 0.5) * TQ * 4), cy: Math.round((h.ty + 0.5) * TQ * 4),
+        jump: h.J, sustained: h.S, score: h.score,
+      };
+      events.push(ev);
+      // crop budget goes to the TOP-scored events, not the earliest
+      if (crops.length < 24) {
+        crops.push({ ...ev, png: cropStrip(t, h.tx, h.ty) });
+      } else {
+        let mi = 0;
+        for (let k = 1; k < crops.length; k++) if (crops[k].score < crops[mi].score) mi = k;
+        if (ev.score > crops[mi].score) crops[mi] = { ...ev, png: cropStrip(t, h.tx, h.ty) };
       }
     }
   }
   events.sort((a, b) => b.score - a.score);
   return JSON.stringify({
     frames: O.frames, tilesX: tw, tilesY: th, misaligned,
-    events: events.slice(0, 400), rawDetections: raw, crops,
+    events: events.slice(0, 400), rawDetections: raw, crops, flashes,
   });
 })()`;
 }
@@ -321,8 +339,13 @@ async function main(): Promise<void> {
   );
   console.log(
     `[pops] events: ${res.events.length} (raw detections ${res.rawDetections}) ` +
-      `at score≥${scoreThresh}, sustained≥${sustainThresh}/255`,
+      `at score≥${scoreThresh}, sustained≥${sustainThresh}/255 · flashes: ${res.flashes.length}`,
   );
+  for (const fl of res.flashes.slice(0, 10)) {
+    console.log(
+      `  FLASH u=${fl.u.toFixed(4)} f=${fl.frame}  ${fl.tiles} tiles  meanΔ=${fl.meanS.toFixed(1)}`,
+    );
+  }
   for (const e of res.events.slice(0, Number(str(args['maxevents']) ?? 25))) {
     console.log(
       `  u=${e.u.toFixed(4)} f=${e.frame}  (${e.cx},${e.cy})  ` +
