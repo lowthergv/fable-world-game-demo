@@ -54,9 +54,12 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   }
 
   // physical sky first: probe gathering needs the atmosphere LUTs.
-  // ?shot=N boots straight into a composed bookmark — use ITS time of day
+  // ?shot=N boots straight into a composed bookmark — use ITS time of day,
+  // unless ?T was given explicitly (pose × ToD sweeps)
   const bootBm = params.shot !== null ? BOOKMARKS[params.shot - 1] : undefined;
-  const bootTod = bootBm?.tod ?? params.timeOfDay;
+  const bootTod = params.timeOfDayExplicit
+    ? params.timeOfDay
+    : (bootBm?.tod ?? params.timeOfDay);
   ctx.progress(0.93, 'sky: baking atmosphere LUTs');
   const sunSky = new SunSky(engine, bootTod);
   await sunSky.init(engine.renderer);

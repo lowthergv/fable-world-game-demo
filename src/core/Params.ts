@@ -9,6 +9,10 @@ export interface LaasParams {
   scene: string;
   /** time of day, hours 0..24 */
   timeOfDay: number;
+  /** true when ?T was given explicitly — overrides a ?shot bookmark's
+   *  composed ToD (tooling needs pose × ToD sweeps, e.g. K-2's "clean at
+   *  all ToD" gate) */
+  timeOfDayExplicit: boolean;
   /** quality preset: low (iGPU floor), high (default), ultra (max grids) */
   preset: QualityPreset;
   /** HUD visible at boot */
@@ -43,6 +47,7 @@ export function parseParams(search: string = window.location.search): LaasParams
     seed: Math.floor(num(q.get('seed'), 1)) >>> 0,
     scene: q.get('scene') ?? 'world',
     timeOfDay: Math.min(24, Math.max(0, num(q.get('T'), 11))),
+    timeOfDayExplicit: q.get('T') !== null,
     preset,
     // full debug panel hidden by default — F3 toggles it (fps chip always on)
     hud: q.get('hud') === '1',
