@@ -205,6 +205,35 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 
 ## Next actions (always keep current)
 
+- **K-1 TOP CONTRIBUTOR FIXED — CUSTOM TRAA RESOLVE (2026-07-02, commit fe846ac).**
+  `src/render/TraaResolve.ts` replaces stock TRAANode (`?traa=stock` = A/B
+  escape hatch; identical halton sequence + view-offset lifecycle + analytic-
+  velocity seam — framealign law). Three changes: (1) REST-WIDENED VARIANCE
+  CLIP — γ ramps 1→3 (cvar traa_gammastill) where velocity is low (≤4 px/
+  frame ramp; far content reprojects exactly under slow pan — no parallax/
+  disocclusion) AND beyond the wind-fade distance (traa_far0/1 = 260/440 m),
+  so near swaying foliage + fast motion keep stock-tight behavior;
+  (2) CATMULL-ROM history (5-tap renormalized cross, exact center tap at
+  rest); (3) PING-PONG history targets (kills stock's two full-res copies/
+  frame + separate resolve RT; prev-depth disocclusion test dropped —
+  variance clip covers it, verified by motion-stop probe).
+  MEASURED (bm3, native, frame-aligned): rest flicker mean 0.998→0.411
+  (−59%), p95 4.85→1.49, >5/255 px 4.85→1.50%; flythrough-speed pan
+  3.94→3.50; fast-pan + motion-stop parity (cloudlag 9.35 vs 8.98%).
+  **HF LAPLACIAN vs fresh 4×SSAA ground truth (tools/hf-energy.ts):
+  custom 86.5% (textbook reconstruction band) vs stock 59.1% — the stock
+  resolve was destroying ~40% of real detail at rest; this is a quality
+  GAIN on both axes.** GPU parity (resolve 4.92 vs 4.85 ms encoder span,
+  wall identical) — the queued "leaner resolve" perf item is NOT closed by
+  this; post-chain merges continue separately.
+  K-1 REMAINING: residual hotspots = near-mid canopy inside the wind gate
+  (intentional — protects wind crispness; tune traa_far0 live with user),
+  clouds region, far-massif speckle, and unexplained dotted-ring patterns
+  (suspect probe-GI refresh grid — run `--ablate gi` probe when picked up).
+  Probe pass thresholds still to calibrate once bm-sweep numbers exist
+  (bake into battery + `--maxmean/--maxtile`). USER CONFIRM outstanding
+  (fly camera live look — K-list rule).
+
 - **M1 STARTED — TEMPORAL-STABILITY PROBE BUILT + K-1 ATTRIBUTED (2026-07-02).**
   `tools/probe-temporal.ts` (v3 §12.1): records CONSECUTIVE frames in-page
   (node-side screenshots skip ~15 frames — capture is drawImage→getImageData
