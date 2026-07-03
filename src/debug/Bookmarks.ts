@@ -37,7 +37,11 @@ export const BOOKMARKS: Bookmark[] = [
   { name: 'Morning meadow shafts', x: -870, z: 862, alt: 1.8, yaw: -1.45, pitch: 0.02, tod: 8.2 },
   { name: 'Alpine tarn', x: 805, z: -1464, alt: 2.2, yaw: 1.57, pitch: -0.4, tod: 15.5 },
   { name: 'Karst ravine mouth', x: 650, z: 700, alt: 5, yaw: 0.6, pitch: -0.06, tod: 15 },
-  { name: 'Forest interior dapple', x: -850, z: 850, alt: 4, yaw: -0.785, pitch: -0.05, tod: 12.5 },
+  // re-posed 2026-07-02 (Phase-7 close-out): the old pose framed a trunk
+  // close-up from inside a crown. Now a backlit interior: sun through the
+  // canopy upper-left, layered trunks, dapple pools on a mixed grass floor
+  // (judged from a 12-candidate sweep, shots/wip/bm7/)
+  { name: 'Forest interior dapple', x: -864, z: 856, alt: 2.6, yaw: -1.45, pitch: 0.03, tod: 12.5 },
   { name: 'Lakeshore golden', x: -1400, z: 1250, alt: 2.5, yaw: 3.14, pitch: -0.12, tod: 18.5 },
   { name: 'Valley network aerial', x: -600, z: 700, alt: 260, yaw: -0.6, pitch: -0.5, tod: 17.5 },
 ];

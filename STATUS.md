@@ -245,7 +245,11 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
   probe-pops flashes now record meanJ; battery gates only STEP-flashes
   (meanJ ≥ 0.5·meanS). Tour early-segment (u<0.013) floor-dapple "swaps"
   = GI convergence tail after the 120-frame pre-roll → pre-roll now 300
-  (GI slice refresh ≈240 frames). Tour raw detections rose 15.9k→37.2k
+  (GI slice refresh ≈240 frames; onset-check discriminator: segment
+  starting at u=0.05 shows ZERO swaps at its own start with the new
+  pre-roll). Battery swap gate calibrated on measured class separation:
+  pre-fix pops Δ38–50 at jump/Δ ≥0.85 vs benign tail Δ≤21 at ≤0.66 →
+  gate Δ≥25 AND jump≥0.65·Δ. Tour raw detections rose 15.9k→37.2k
   post-fix — expected: the caster-cap fix RESTORED ~half the far crown
   shadows, so there is legitimately more dapple to sweep.
   REMAINING FOR K-4 CLOSE: battery pops gate green + USER free-flight

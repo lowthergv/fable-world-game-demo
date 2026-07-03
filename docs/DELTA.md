@@ -1,5 +1,40 @@
 # DELTA log — reference-gap tracking (newest phase first)
 
+## M1 close (2026-07-02) — Phase-7 contact sheet + standing two-frame test
+
+Shots: `shots/battery/contact-sheet.jpg` (9 bookmarks), `shots/wip/twoframe-vista.jpg`,
+`shots/wip/twoframe-ravine.jpg`, `shots/wip/k3/bm4-d5.png` (K-3 round 2 result).
+
+Contact-sheet re-judge (fixed this session):
+- ~~bm4 foreground vinyl blob~~ — StoneL at detail 3 physically could not
+  express its surface displacement (14 cm vertex spacing); d1 5/d2 3 +
+  fscale + scatter context fix. Strata terraces + fracture shoulders now read.
+- ~~bm7 trunk close-up~~ — re-posed to a backlit interior with dapple pools
+  (12-candidate sweep, shots/wip/bm7/).
+
+Open items (ranked, none introduced this session — all pre-date it):
+1. bm1/water-edge translucent triangle shards on banks (K-2 family; the
+   structural kill remains RT-1 in M2). Visible in bm1 bottom-right at
+   ground framings.
+2. Two-frame ravine: bank vegetation density well below scene1's layered
+   undergrowth (near-bank slope reads bare rock + grass tufts); no shafts
+   at the bm1 framing/hour. The forested-ravine CHARACTER of scene1 needs
+   its own framing or denser gorge-wall planting (Phase-5 "geometric wall
+   plants" carry-over).
+3. Two-frame vista: far-massif silhouettes still smooth vs the reference's
+   serrated spires (standing since Phase 2); golden grade reads softer than
+   the Phase-2 gate era — verify intended strength with the user live.
+4. bm5 (Alpine tarn): green polygon shards at the rock/water edge +
+   composition dominated by the reflection wall — needs triage + possible
+   re-pose.
+5. bm8 (Lakeshore golden): full contre-jour whiteout at T18.5 — legible as
+   glare art only; flag for an art call (re-yaw ~0.4 rad would recover the
+   shoreline).
+
+Verification-infrastructure findings logged in STATUS (K-4 root cause =
+shadow-caster onset; caster cap overflow; dapple-sweep flash false-positive
+class; probe GI pre-roll).
+
 ## Phase 2 close (2026-06-11) — light/atmosphere/clouds/post vs Witcher golden frame
 
 Shots: `shots/wip/gateA4.png` (golden vista), `gate-cmp3.png` (side-by-side),
