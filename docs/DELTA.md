@@ -1,5 +1,23 @@
 # DELTA log — reference-gap tracking (newest phase first)
 
+## M1 close addendum (2026-07-03) — user played it; verdict logged
+
+User live K-confirms (their viewport, in motion): **K-2 / K-3 / K-4 PASS**
+(K-4's free-flight confirm also resolves the battery pops stage's amber
+acceptance path → battery effectively 6/6). **K-1 FAIL — reopened**: the
+`traa_far0`/`traa_gammastill` knobs were a no-op live. Same-day attribution
+(probe-temporal rest @bm3, control 0.414 == the 2026-07-02 baseline;
+`--ablate gi` worse at 0.452 = content confound): probe-GI EXONERATED;
+worst tiles cluster in the near-mid canopy INSIDE the wind gate, where the
+γ ramp's velocity-AND-distance condition keeps the clip stock-tight at any
+knob value. Carried into M2 with a concrete candidate fix
+(history-confidence clip widening) — see STATUS M2 scaffold.
+New user observation (separate from K-2, which is dead): shore close-up —
+water surface not quite level with the ground; ranked into M2 water work.
+Perf gate rows: cooled ABAB knobs (`stonedetail`/`castercap`) both 0.00 ms
+at bm1; cooled fps report table in STATUS (no regression on comparable
+bookmarks).
+
 ## M1 close (2026-07-02) — Phase-7 contact sheet + standing two-frame test
 
 Shots: `shots/battery/contact-sheet.jpg` (9 bookmarks), `shots/wip/twoframe-vista.jpg`,
