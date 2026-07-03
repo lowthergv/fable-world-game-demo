@@ -205,6 +205,28 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 
 ## Next actions (always keep current)
 
+- **M1 GATE: ABAB FPS REPORT vs BASELINE — DONE (2026-07-03). No
+  regression anywhere; new post-M1 baseline table established.**
+  Cooled single-session run (180 s idle → one boot → `bench <bm> 10`
+  per bookmark), native 2592×1676, prof=1 (same as the 2026-06-13
+  baseline era — the 58.3/91.7 ms p90 spike modes are the documented
+  profiler timestamp serialization, NOT frame-pacing regressions):
+  | bm | p50 wall | fps | cpu.submit | gpu-sum | 2026-06-13 cooled |
+  |----|---------|-----|-----------|---------|-------------------|
+  | 1 gorge stream    | 25.0 | 34.4 | 9.4  | 41.0 | 29.1 (−4.1) |
+  | 3 golden vista    | 17.6 | 39.2 | 9.5  | 31.5 | 25.3 (re-posed*) |
+  | 4 meadow shafts   | 41.7 | 21.4 | 10.2 | 42.5 | 42.8 (−1.1) |
+  | 7 forest interior | 41.7 | 20.9 | 10.3 | 43.4 | 38.0 (re-posed*) |
+  | 9 valley aerial   | 25.0 | 35.0 | 9.4  | 32.0 | (re-posed*) |
+  *bm3/bm9 old numbers were ground-level framings (walk-snap bug, fixed
+  2026-07-02) and bm7 was re-posed to the backlit interior — these rows
+  are NEW baselines, not comparisons. Comparable rows (bm1, bm4) are at
+  or better than baseline. THIS TABLE = the reference for all M2+ perf
+  claims (via `bench ab`, methodology law). 120 fps directive remains
+  open work: heaviest rows are GPU-bound (gpu-sum 42-43 ms at bm4/bm7)
+  with cpu.submit ~10 ms — the ranked queue (post merges, submit cuts)
+  carries into M2 as background perf work.
+
 - **bm1 HOT-READ ANOMALY RESOLVED — THERMAL, NO REGRESSION (2026-07-03,
   commit 0803ee7+). The cooled-ABAB blocker on M1 is CLEARED; the gate now
   waits on user K-confirms only.**
