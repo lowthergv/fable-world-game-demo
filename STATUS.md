@@ -234,6 +234,38 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
   (bake into battery + `--maxmean/--maxtile`). USER CONFIRM outstanding
   (fly camera live look — K-list rule).
 
+- **BENCH + DEMO CONSOLE COMMANDS LANDED (2026-07-02, commit 25f6f98).**
+  `bench [secs]` / `bench <bm 1-9> [secs]`: wall-dt percentiles p50-p99/max,
+  fps, spike count (probe-spikes rule), cpu.update/submit + gpu medians.
+  `bench ab <cvar> <a> <b> [secs]`: automated in-session ABAB — 4 alternating
+  rounds with warmup, per-round rows + Δp50; the binding methodology as one
+  command (use this for ALL perf claims from now on). `demo record/play/
+  stop/list/delete`: 60 Hz pose track + ToD + seed in localStorage; playback
+  drives the camera (fly input off), refuses seed mismatch; `demo play x`
+  then `bench 30` = measured replay of a user-seen scenario. Weather is NOT
+  recorded — pin manually before record AND play (documented in Demo.ts).
+  E2E: tools/probe-bench.ts, 8/8 (replay end Δx=0.0). Console.findCommand
+  exported (programmatic knob driving).
+
+- **FLYTHROUGH PATH WAS BROKEN + K-4 FIRST RESULTS (2026-07-02, commit 1a6447f).**
+  The pop probe's full-tour run produced huge whole-frame "flash" events;
+  triage: the camera flew THROUGH tree crowns, and tools/probe-clearance.ts
+  (new) showed the raw tour spline 28 m / 146 m UNDERGROUND in two spans
+  (karst ridge crossing) — the live flythrough only survived via the fly
+  rig's soft clamp, skimming canopy. Tour curve now rebuilt with two-pass
+  arc-uniform clearance clamping (+28 m headroom → ~20 m delivered) blending
+  to authored altitude within ±110 m of waypoints (composed low moments
+  keep their framing; approaches read as swoops). probe-pops classifies
+  simultaneous >2%-of-tiles steps as FLASH events, separate stream.
+  **RE-PROBED the three formerly-flashing segments (lake/forest/karst,
+  quarter-speed, water ablated): ZERO events, ZERO raw detections, ZERO
+  flashes.** Much of the K-4 seed report was likely (a) the tour clipping
+  canopy + (b) K-1 shimmer reading as pops — both now dead. Full-tour
+  coverage of the remaining segments in flight; if clean, flip the battery
+  pops stage from informational to a hard zero-events gate. USER free-flight
+  confirm still required (near lateral content is un-probeable — see probe
+  header).
+
 - **K-4 INSTRUMENTED — POP PROBE BUILT (2026-07-02, commit c384700).**
   `tools/probe-pops.ts` (v3 §12.2): deterministic flythrough (Bookmarks now
   exposes `__laasDbg.flyPose(u)` — the live flythrough integrates wall dt and
