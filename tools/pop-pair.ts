@@ -97,7 +97,7 @@ async function main(): Promise<void> {
       async ({ pose, n }) => {
         const hk = window.__laas;
         if (!hk.setPose || !hk.settle) throw new Error('hooks missing');
-        hk.setPose(pose as { p: number[]; yaw: number; pitch: number });
+        hk.setPose(pose as { p: [number, number, number]; yaw: number; pitch: number });
         await hk.settle(n);
       },
       { pose: poseAt(f), n: settle },

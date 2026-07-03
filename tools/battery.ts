@@ -143,20 +143,41 @@ function pops(fast: boolean): StageResult {
   const segs = fast
     ? [{ u0: '0', u1: '0.15' }, { u0: '0.55', u1: '0.7' }]
     : [{ u0: '0', u1: '1' }];
-  let events = 0;
+  // GATE (armed 2026-07-02, K-4 root cause fixed): the acceptance class is
+  // the INSTANT SWAP — sustained ≥ 20/255 with jump comparable to the
+  // sustained step (the probe's jump≈sustained taxonomy; pre-fix dolly had
+  // 21 such events, post-fix 0). The low tail (score 8–14, jump≪sustained)
+  // is crossfade ramps working as designed — not gated. Flashes gate at 0.
+  // Particles ablated alongside water: both are wall-clock movers under
+  // ?freeze (documented probe confound).
+  let swaps = 0;
+  let flashes = 0;
   const details: string[] = [];
   for (const s of segs) {
+    const tag = `battery-${s.u0}-${s.u1}`;
     const r = run([
       'tsx', 'tools/probe-pops.ts', '--u0', s.u0, '--u1', s.u1, '--slow', '4',
-      '--ablate', 'water', '--tag', `battery-${s.u0}-${s.u1}`,
+      '--ablate', 'water,particles', '--tag', tag,
     ], 60 * 60 * 1000);
-    const m = /events: (\d+) \(raw/.exec(r.out);
-    const n = Number(m?.[1] ?? 999);
-    events += n;
-    details.push(`u ${s.u0}→${s.u1}: ${n} events`);
+    if (r.code !== 0 && !existsSync(`shots/wip/pops/${tag}-events.json`)) {
+      return { name: 'pops', pass: false, detail: `probe failed on u ${s.u0}→${s.u1}` };
+    }
+    const j = JSON.parse(readFileSync(`shots/wip/pops/${tag}-events.json`, 'utf8')) as {
+      events: { sustained: number; jump: number }[];
+      flashes: unknown[];
+    };
+    const segSwaps = j.events.filter(
+      (e) => e.sustained >= 20 && e.jump >= 0.5 * e.sustained,
+    ).length;
+    swaps += segSwaps;
+    flashes += j.flashes.length;
+    details.push(`u ${s.u0}→${s.u1}: ${segSwaps} swaps, ${j.flashes.length} flashes (${j.events.length} raw events)`);
   }
-  // informational until the band re-tune lands; flip to `events === 0` then
-  return { name: 'pops', pass: true, detail: `${details.join(' · ')} (informational)` };
+  return {
+    name: 'pops',
+    pass: swaps === 0 && flashes === 0,
+    detail: `${details.join(' · ')} — gate: 0 swaps (Δ≥20, jump≈sustained) + 0 flashes`,
+  };
 }
 
 function hf(): StageResult {

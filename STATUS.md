@@ -205,6 +205,40 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 
 ## Next actions (always keep current)
 
+- **K-4 ROOT-CAUSED AND FIXED (2026-07-02, commit 14f2e0a) — BATTERY RE-RUN + USER CONFIRM PENDING.**
+  The deterministic dolly pops were SHADOWS: tree R1 caster onset was
+  binary (fade:null) — entering the R1 band swapped a crown's shadow from
+  the ~75%-density dithered proxy to FULL card+trunk casters in ONE frame;
+  a grove row crossing together landed a ~60 m shadow mass instantly
+  (dolly f=920, Δ27/255). Proven by frame-exact single-boot scan
+  (tools/pop-scan.ts): Δ dies with ?ablate=shadows, veg.r1:+3 at the flip
+  every run, and the fix (world-anchored hash density ramp on R1 caster
+  onset, Forests.ts — same anti-swim law as proxyCasterMat) takes f=920
+  from −26.9 to +0.00 with the same trees still crossing.
+  ALSO FOUND + FIXED: impostor-band crown-proxy CASTER caps silently
+  overflowed ~2× (spruce c3 15,927/8,192 — an append-order-dependent HALF
+  of far crown shadows was dropped and reshuffled; caps → 24576,
+  ~+1.6 MB). `veg.capOver` HUD counter now flags ANY over-cap group —
+  a nonzero value is a correctness bug. ImpostorRuntime fade now obeys
+  the vegViewPos law (was TSL cameraPosition). NOTE: restored far crown
+  shadows CHANGE far-field pixels vs the pre-fix baseline (missing
+  content restored — judged improvement; re-judge at the Phase-7 sheet).
+  New instruments: pop-pair/pop-scan/pop-groups (single-boot, frame-exact,
+  per-group counter diffs w/ CAP! markers), ?clsdbg=2 ring colors,
+  ?vegocc, ?castpad. Eliminated by direct experiment: grass ring, GI,
+  contact, cascade count/stagger/cache, caster pad, occlusion march,
+  prepass, canopy shell, pose error, main-view caps, TRAA.
+  DOLLY BATTERY POST-FIX (same 3000-frame push, --ablate water,particles;
+  particles = wall-clock movers, same documented confound as water):
+  vs pre-fix baseline (dolly-bigcaps): max sustained Δ 49.7→17.6, max
+  score 83→20, events Δ≥20/255 21→ZERO, score≥15 68→3 — and all 3
+  survivors are jump≪sustained (4-5 vs 13-15) = crossfade RAMPS working
+  as designed in low-noise corner tiles, NOT swaps. Flashes 0. The
+  instant-swap class (jump≈sustained, Δ38-50) is ERADICATED on the dolly.
+  REMAINING FOR K-4 CLOSE: tour u 0-0.24 re-run (in flight) incl. the
+  noon u≈0.237 ~78-tile flash check (suspected same caster-onset class)
+  + USER free-flight confirm (K-list rule).
+
 - **K-4 DEEP TRIAGE — STATE + EXACT CONTINUATION (2026-07-02 end of session).**
   Instruments now in place: pop probe (tour + DOLLY mode + flash class +
   fail-loud arg guards), probe-clearance, pop-crop. FINDINGS, all verified:
