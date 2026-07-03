@@ -13,7 +13,9 @@ import { FlyCamera } from './core/FlyCamera';
 import { initHooks } from './core/Hooks';
 import { parseCamString, parseParams } from './core/Params';
 import { WorldSeed } from './core/Seed';
+import { installBench } from './debug/Bench';
 import { DevConsole } from './debug/Console';
+import { installDemo } from './debug/Demo';
 import { Hud } from './debug/HUD';
 import { buildGalleryScene } from './debug/GalleryScene';
 import { buildSanityScene } from './debug/SanityScene';
@@ -112,6 +114,11 @@ async function boot(): Promise<void> {
   hooks.setPose = (p) => fly.setPose(p);
   hooks.getPose = () => fly.getPose();
   hooks.settle = (frames?: number) => engine.settle(frames ?? 8);
+  // measurement + repro console tooling (M1): `bench` (in-session ABAB
+  // percentile tables) and `demo` (camera-run record/replay) — registered
+  // after the pose hooks they drive
+  installBench(engine);
+  installDemo(engine, hooks, params.seed);
   hooks.flyCamEnabled = (on) => {
     fly.enabled = on;
   };

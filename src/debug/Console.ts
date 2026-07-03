@@ -33,6 +33,11 @@ export function registerCommand(cmd: ConsoleCommand): void {
   REGISTRY.set(cmd.name, cmd);
 }
 
+/** programmatic command lookup — `bench ab` drives other knobs by name */
+export function findCommand(name: string): ConsoleCommand | undefined {
+  return REGISTRY.get(name);
+}
+
 /**
  * Value-knob sugar: bare name prints the current value, one arg sets it.
  * `set` returns an error string to reject, or undefined to accept.
