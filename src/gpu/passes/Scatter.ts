@@ -785,15 +785,18 @@ export async function runScatter(
         scale.assign(h2.y.pow(1.7).mul(1.6).add(0.6)); // 0.6–2.2 m
         sink.assign(scale.mul(0.3).mul(bed));
         // variant by context: 0/1 pale faceted talus on scree/exposed rock/
-        // dry pale soil (matches the pale splat), 2/3 dark rounded stones
-        // in streambeds and on moist mossy forest floor
-        const paleCtx = s.rockExp
-          .greaterThan(0.35)
-          .or(s.slope.greaterThan(0.42))
-          .or(s.moisture.lessThan(0.32))
-          .and(streamK.lessThan(0.35));
+        // dry-to-mesic open ground (a big faceted block reads as a glacial
+        // erratic in meadows), 2/3 dark WATER-rounded stones ONLY where
+        // water plausibly rounded them: real streambeds or genuinely wet
+        // floor. The old gate ("not dry" ⇒ rounded) leaked streambed
+        // boulders into grassy meadows — the bm4 foreground vinyl blob
+        // (K-3 contact-sheet re-judge, 2026-07-02: StoneL v3 at
+        // moisture≈0.4, streamK≈0, 4 m from the bookmark camera).
+        const darkCtx = streamK
+          .greaterThanEqual(0.2)
+          .or(s.moisture.greaterThanEqual(0.55));
         const vr = cellHash(cell, sS ^ 0x1d2d).mul(2).floor().min(1);
-        variant.assign(vr.add(paleCtx.select(float(0), float(2))));
+        variant.assign(vr.add(darkCtx.select(float(2), float(0))));
       }).Else(() => {
         If(sr.lessThan(0.45), () => {
           cls.assign(int(VegClass.StoneM));

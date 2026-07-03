@@ -33,6 +33,15 @@ export interface RockParams {
   cutBite: number;
   /** micro grain amplitude */
   micro: number;
+  /**
+   * frequency multiplier on the surface-noise octaves (macro/strata-warp/
+   * ridged/micro). Those base frequencies are tuned at unit radius, so a
+   * 2–3 m StoneL dilates every feature ~2.5× past believable and reads as
+   * a smooth vinyl dome (K-3 round 2). Presets used at large world scale
+   * set this ≈ their typical world radius so ABSOLUTE feature size stays
+   * near the fieldstone look that passed close-up review. Default 1.
+   */
+  fscale?: number;
 }
 
 export const ROCK_PRESETS = {
@@ -46,10 +55,15 @@ export const ROCK_PRESETS = {
   // feeds vdata.y albedo bands), creases, worn small-bite facets, grain.
   // The old values (strata .045/ridged .05/cuts 2×.1/micro .012) read as a
   // featureless gray dome at 0.5–2 m in meadow foregrounds (bm4).
+  // K-3 round 2 (contact-sheet re-judge 2026-07-02): at StoneL scale (2-3 m)
+  // on open ground the surface still read vinyl — one wide strata band
+  // became a pale "cap" and the worn facets vanished at 4× dilation.
+  // Denser strata + more worn cuts + stronger ridged/micro; silhouette
+  // still rounded (streambed art preserved — the K-3 constraint).
   boulder: {
     radius: 1.1, squash: [1, 0.74, 0.92] as [number, number, number],
-    macro: 0.3, strata: 0.11, strataFreq: 4.4, strataTilt: 0.2,
-    ridged: 0.12, cuts: 4, cutBite: 0.22, micro: 0.03,
+    macro: 0.3, strata: 0.13, strataFreq: 5.8, strataTilt: 0.2,
+    ridged: 0.16, cuts: 6, cutBite: 0.24, micro: 0.042, fscale: 1.8,
   },
   angular: {
     radius: 0.85, squash: [1, 0.85, 0.95] as [number, number, number],
@@ -82,11 +96,16 @@ export const ROCK_PRESETS = {
   },
   // freshly-shed talus block: faceted but not box-prismatic ('angular' at
   // cuts 10/bite .5 produced near-cubes), with surface roughness so the
-  // facets aren't dead-flat planes
+  // facets aren't dead-flat planes. K-3 contact-sheet re-judge (2026-07-02):
+  // at StoneL scatter scale (2–4 m) the old settings read as a smooth pale
+  // dome in meadow foregrounds (bm4 blob) — surface frequencies are built
+  // at unit radius and dilate with instance scale, so the preset must be
+  // facet-forward enough to survive 4×: more/deeper cuts, denser strata,
+  // stronger ridged + micro. Still below the near-cube regime.
   talus: {
     radius: 0.95, squash: [1, 0.8, 0.9] as [number, number, number],
-    macro: 0.2, strata: 0.05, strataFreq: 4.2, strataTilt: 0.4,
-    ridged: 0.14, cuts: 7, cutBite: 0.36, micro: 0.02,
+    macro: 0.2, strata: 0.07, strataFreq: 6.2, strataTilt: 0.4,
+    ridged: 0.19, cuts: 9, cutBite: 0.4, micro: 0.032, fscale: 1.8,
   },
 } as const;
 
@@ -201,19 +220,21 @@ export function buildRock(
   const dir = new Vector3();
 
   // radial displacement field along unit dir
+  const fs = p.fscale ?? 1;
   const fieldR = (d: Vector3): { r: number; strataT: number; cav: number } => {
-    // macro warp: low-freq fbm of direction
+    // macro warp: low-freq fbm of direction (macro stays at base frequency —
+    // the large-scale silhouette SHOULD scale with the rock)
     const macro = fbm3(d.x * 1.4, d.y * 1.4, d.z * 1.4, seedA, 3) * p.macro;
     // strata: banding along tilted axis with per-band hardness
     const s = d.dot(strataAxis) * p.strataFreq + strataPhase
-      + fbm3(d.x * 2.3, d.y * 2.3, d.z * 2.3, seedB, 2) * 0.5;
+      + fbm3(d.x * 2.3 * fs, d.y * 2.3 * fs, d.z * 2.3 * fs, seedB, 2) * 0.5;
     const band = Math.floor(s);
     const f = s - band;
     const amp = bandAmp[((band % 24) + 24) % 24] as number;
     // ledge profile: quick rise, slow fall → overhang-ish steps
     const ledge = (Math.min(f * 4.2, 1) - f * 0.62) * p.strata * amp;
-    const rid = ridged3(d.x * 3.1, d.y * 3.1, d.z * 3.1, seedC, 3) * p.ridged;
-    const micro = fbm3(d.x * 14, d.y * 14, d.z * 14, seedB ^ 0x55aa, 2) * p.micro;
+    const rid = ridged3(d.x * 3.1 * fs, d.y * 3.1 * fs, d.z * 3.1 * fs, seedC, 3) * p.ridged;
+    const micro = fbm3(d.x * 14 * fs, d.y * 14 * fs, d.z * 14 * fs, seedB ^ 0x55aa, 2) * p.micro;
     let r = 1 + macro + ledge + rid + micro;
     // fracture cuts: clamp radius against planes (flat facets), smoothed
     let cav = 0;

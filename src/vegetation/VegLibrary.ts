@@ -464,7 +464,12 @@ export async function buildVegLibrary(
     moss: number;
     maxDist: number;
   }[] = [
-    { cls: VegClass.StoneL, preset: 'boulder', d1: 3, d2: 2, moss: 0.22, maxDist: 900 },
+    // K-3 round 2 (2026-07-02): StoneL d1 3→5 / d2 2→3. At detail 3 a
+    // 2.6 m foreground boulder has ~14 cm vertex spacing — ridged/micro
+    // displacement CANNOT land on the mesh and every StoneL reads as a
+    // smooth vinyl dome regardless of preset values (bm4 blob). Detail 5
+    // ≈ 20k tris × a handful of R1 instances in range — negligible budget.
+    { cls: VegClass.StoneL, preset: 'boulder', d1: 5, d2: 3, moss: 0.22, maxDist: 900 },
     // K-3: StoneM was 'cobble' d1 2 — smooth gray blobs at meadow scale
     // (bm4 foreground). Fieldstone preset + one detail level so the strata/
     // facet field has vertices to land on (320→1280 tris R1).
