@@ -85,7 +85,7 @@ import { canopyAt, type ScatterLayer, type ScatterResult } from '../gpu/passes/S
 import { impostorQuad, impostorRuntimeMaterial } from '../render/ImpostorRuntime';
 import { instanceVeg, updateVegViewPos, type RingFade } from '../render/VegInstance';
 import { depthPrepassTwin } from '../render/VegPrepass';
-import type { NF, NI, NU, NV3, NV4 } from '../gpu/TSLTypes';
+import type { NB, NF, NI, NU, NV3, NV4 } from '../gpu/TSLTypes';
 import type { VegLib } from './VegLibrary';
 
 // ring distances (m) + dither bands (user feedback: transitions read too
@@ -163,7 +163,14 @@ function capOf(g: number): number {
     // caster regions: a cascade box covers a slice of the frustum, so the
     // worst case is well under the main-view caps
     const local = (g - MAIN_GROUPS) % CASC_LOCALS;
-    if (local >= 136) return 8192; // impostor-band crown proxies (per cls)
+    // impostor-band crown proxies (per cls): the band is a 424–1100 m ring
+    // around the camera ∩ cascade box ≈ 3.2 km² ≈ 32k trees at world density
+    // — measured 15.9k spruce in c3 at the K-4 dolly framing. The old 8192
+    // silently dropped an append-order-dependent HALF of them: whole grove
+    // shadows popped in/out as membership churn reshuffled which chunk fell
+    // past the cap (K-4 root cause, 2026-07-02). Overflow now surfaces as
+    // veg.capOver in the HUD — never let this go silent again.
+    if (local >= 136) return 24576;
     if (local < 48) return local % 2 === 0 ? 3072 : 6144; // tree r1/r2
     if (local < 72) return CAP_HERO;
     const pe = (local - 72) >> 1;
@@ -557,13 +564,24 @@ export class Forests {
           });
           this.patchGI(mat);
           // ?clsdbg=1 — flat-color every draw by VegClass (artifact triage:
-          // "which pool is that?"); keeps alpha cutouts so silhouettes read
-          if (new URLSearchParams(window.location.search).get('clsdbg') === '1') {
-            const hue = (pool.cls * 47) % 360;
-            const cdbg = new Color().setHSL(hue / 360, 0.95, 0.55);
-            const op = mat.opacityNode as unknown as NF | null;
-            mat.colorNode = vec4(vec3(cdbg.r, cdbg.g, cdbg.b), 1);
-            if (op) mat.opacityNode = op;
+          // "which pool is that?"); keeps alpha cutouts so silhouettes read.
+          // ?clsdbg=2 — flat-color by RING instead (K-4 triage: "which ring
+          // owns these pixels?"): r0 white / r1 green / r2 red.
+          {
+            const cq = new URLSearchParams(window.location.search).get('clsdbg');
+            if (cq === '1' || cq === '2') {
+              const cdbg =
+                cq === '1'
+                  ? new Color().setHSL(((pool.cls * 47) % 360) / 360, 0.95, 0.55)
+                  : ring === 0
+                    ? new Color(1, 1, 1)
+                    : ring === 1
+                      ? new Color(0.1, 0.9, 0.15)
+                      : new Color(0.9, 0.1, 0.1);
+              const op = mat.opacityNode as unknown as NF | null;
+              mat.colorNode = vec4(vec3(cdbg.r, cdbg.g, cdbg.b), 1);
+              if (op) mat.opacityNode = op;
+            }
           }
           addDraw(part.geo, mat, g, part.tris);
           // per-cascade caster siblings. Tree R2 skips its card/bark parts —
@@ -580,7 +598,7 @@ export class Forests {
             for (let c = 0; c < cascadeMax; c++) {
               const cg = casterGroupOf(c, pool.cls, pool.variant, ring);
               const cmat = part.make();
-              instanceVeg(cmat, {
+              const ch = instanceVeg(cmat, {
                 bufA: layer.bufA,
                 bufB: layer.bufB,
                 compact: this.compact,
@@ -588,6 +606,30 @@ export class Forests {
                 fade: null,
                 wind: windBind,
               });
+              // K-4 fix (2026-07-02): a tree entering the R1 band used to
+              // switch from the dithered crown-proxy shadow to FULL real-
+              // geometry shadows in ONE frame — a grove row crossing the
+              // boundary together dropped a 60 m shadow mass on the ground
+              // instantly (the dolly f=920 pop; verified ablate=shadows
+              // kills it, veg.r1:+3 at the flip every run). Ramp the real
+              // R1 caster's density in across the outer R1 band with a
+              // WORLD-ANCHORED hash (screen IGN swims when CSM refits —
+              // same law as proxyCasterMat); the proxy keeps carrying the
+              // bulk term, so total occlusion stays continuous.
+              if (pool.cls < 6 && ring === 1 && crownDensity > 0) {
+                const ramp = smoothstep(
+                  R1_FAR + BAND1,
+                  R1_FAR - BAND1,
+                  ch.dist,
+                );
+                const gate = hash12(
+                  positionWorld.xz.mul(7.31).add(positionWorld.yy.mul(3.97)),
+                ).lessThan(ramp);
+                const prev = (cmat as unknown as { maskShadowNode: NB | null })
+                  .maskShadowNode;
+                (cmat as unknown as { maskShadowNode: unknown }).maskShadowNode =
+                  prev ? (prev.and(gate) as NB) : gate;
+              }
               addDraw(geoView(part.geo), cmat, cg, 0, 2 + c);
             }
           }
@@ -648,6 +690,21 @@ export class Forests {
         fade: fadeFor(cls, 3),
       });
       this.patchGI(mat);
+      // clsdbg contract: impostors flat-color too (1: class hue, 2: ring
+      // magenta) — an uncolored draw in a clsdbg capture must mean
+      // "not Forests", not "Forests impostor"
+      {
+        const cq = new URLSearchParams(window.location.search).get('clsdbg');
+        if (cq === '1' || cq === '2') {
+          const cdbg =
+            cq === '1'
+              ? new Color().setHSL(((cls * 47) % 360) / 360, 0.95, 0.55)
+              : new Color(0.85, 0.1, 0.85);
+          const op = mat.opacityNode as unknown as NF | null;
+          mat.colorNode = vec4(vec3(cdbg.r, cdbg.g, cdbg.b), 1);
+          if (op) mat.opacityNode = op;
+        }
+      }
       addDraw(impostorQuad(), mat, g, 2);
     }
 
@@ -695,16 +752,21 @@ export class Forests {
     };
 
     const planesCsmU = this.planesCsmU;
-    // +30 m slack: the planes are one frame stale (CSM fits its boxes during
-    // the upcoming render) — without it, casters at box edges pop while the
-    // camera moves
+    // slack: the planes are one frame stale (CSM fits its boxes during the
+    // upcoming render) — without it, casters at box edges pop while the
+    // camera moves. ?castpad=N overrides (K-4 triage: is a pop a caster
+    // entering the texel-snapped box after its shadow is already in view?)
+    const padQ = Number(
+      new URLSearchParams(window.location.search).get('castpad') ?? 30,
+    );
+    const castPad = Number.isFinite(padQ) ? padQ : 30;
     const inCascade = (c: number, center: NV3, rad: NF): NF => {
       let inside: NF = float(1);
       for (let p = 0; p < 6; p++) {
         const pl = planesCsmU.element(int(c * 6 + p)) as unknown as NV4;
         const d = pl.xyz.dot(center).add(pl.w);
         inside = inside.mul(
-          d.greaterThan(rad.add(30).negate()).select(float(1), float(0)),
+          d.greaterThan(rad.add(castPad).negate()).select(float(1), float(0)),
         );
       }
       return inside;
@@ -761,21 +823,29 @@ export class Forests {
 
         // main-view visibility: frustum + terrain-occlusion march (camera
         // sight line) — casters intentionally skip BOTH (an off-screen or
-        // ridge-hidden tree still casts into the visible scene)
+        // ridge-hidden tree still casts into the visible scene).
+        // ?vegocc=0 disables the march, ?vegocc=N overrides the clearance
+        // threshold (K-4 triage: a binary march flip pops whole instances)
+        const occQ = Number(
+          new URLSearchParams(window.location.search).get('vegocc') ?? 4,
+        );
+        const occThresh = Number.isFinite(occQ) ? occQ : 4;
         const visMain = inFrustum(center, rad).toVar();
-        If(visMain.greaterThan(0.5).and(dist.greaterThan(140)), () => {
-          const top = vec3(A.x, A.y.add(hgt), A.z);
-          const occ = float(0).toVar();
-          for (let st = 1; st <= 7; st++) {
-            const t = st / 8;
-            const sp = camU.mul(1 - t).add(top.mul(t)) as unknown as NV3;
-            const th = hf.sampleHeightNearest(vec2(sp.x, sp.z));
-            occ.assign(occ.max(th.sub(sp.y)));
-          }
-          If(occ.greaterThan(4), () => {
-            visMain.assign(0);
+        if (occThresh > 0) {
+          If(visMain.greaterThan(0.5).and(dist.greaterThan(140)), () => {
+            const top = vec3(A.x, A.y.add(hgt), A.z);
+            const occ = float(0).toVar();
+            for (let st = 1; st <= 7; st++) {
+              const t = st / 8;
+              const sp = camU.mul(1 - t).add(top.mul(t)) as unknown as NV3;
+              const th = hf.sampleHeightNearest(vec2(sp.x, sp.z));
+              occ.assign(occ.max(th.sub(sp.y)));
+            }
+            If(occ.greaterThan(occThresh), () => {
+              visMain.assign(0);
+            });
           });
-        });
+        }
 
         if (kind === 'trees') {
           const pool = cls.mul(4).add(variant).toInt();
@@ -971,6 +1041,22 @@ export class Forests {
     return this.hud;
   }
 
+  /**
+   * K-4 triage tooling: per-group counter snapshot. The await forces a GPU
+   * sync, so unlike the throttled HUD path this is frame-exact — pop probes
+   * diff consecutive frames to attribute a visual step to the exact
+   * (pool, ring) membership change.
+   */
+  async debugCounters(
+    renderer: Renderer,
+  ): Promise<{ counts: number[]; caps: number[] }> {
+    const attr = (this.counters as unknown as { value: unknown }).value;
+    const ab = await renderer.getArrayBufferAsync(
+      attr as Parameters<Renderer['getArrayBufferAsync']>[0],
+    );
+    return { counts: [...new Uint32Array(ab)], caps: [...this.groupCaps] };
+  }
+
   private async readStats(renderer: Renderer): Promise<void> {
     try {
       const attr = (this.counters as unknown as { value: unknown }).value;
@@ -986,8 +1072,15 @@ export class Forests {
       let extras = 0;
       let cast = 0;
       let tris = 0;
+      let capOver = 0;
       for (let g = 0; g < GROUPS; g++) {
-        const n = Math.min(counts[g] ?? 0, this.groupCaps[g] ?? 0);
+        const raw = counts[g] ?? 0;
+        const cap = this.groupCaps[g] ?? 0;
+        // a group past its cap SILENTLY drops an append-order-dependent
+        // subset — that reshuffle popped whole grove shadows (K-4 root
+        // cause). Surface it: any nonzero veg.capOver is a correctness bug.
+        if (raw > cap) capOver++;
+        const n = Math.min(raw, cap);
         tris += n * (this.groupTris[g] ?? 0);
         if (g >= MAIN_GROUPS) {
           cast += n;
@@ -1008,6 +1101,7 @@ export class Forests {
         'veg.extraDrawn': extras,
         'veg.cast': cast,
         'veg.tris': Math.round(tris),
+        'veg.capOver': capOver,
       };
     } finally {
       this.reading = false;

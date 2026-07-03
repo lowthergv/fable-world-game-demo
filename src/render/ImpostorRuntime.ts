@@ -31,8 +31,10 @@ import {
   applyDitherFade,
   applyInstanceTint,
   fetchInstance,
+  vegViewPos,
   type InstanceBinding,
 } from './VegInstance';
+import type { NV3 } from '../gpu/TSLTypes';
 
 /** unit quad geometry shared by all impostor draws (x,y ∈ −1..1) */
 export function impostorQuad(): PlaneGeometry {
@@ -119,7 +121,11 @@ export function impostorRuntimeMaterial(
   );
   mat.normalNode = transformNormalToView(nW as never);
 
-  const dist = A.xyz.sub(cameraPosition).length();
+  // fade distance law (see vegViewPos): NEVER cameraPosition — pass-dependent
+  // camera bindings give the fade a different dist than the cull's camU, so
+  // sprites cross the append boundary while still visibly opaque = the K-4
+  // instant pop at the R2↔impostor handoff
+  const dist = A.xyz.sub(vegViewPos as unknown as NV3).length();
   if (bind.fade) applyDitherFade(mat, dist, bind.fade);
   applyInstanceTint(mat, slot, bind.tint ?? 0.14);
   return mat;

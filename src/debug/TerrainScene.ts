@@ -220,6 +220,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     engine,
     sunSky,
     shadowRig,
+    forests: forestsRef,
   };
 
   // GPU particles: snow/pollen/leaves riding the wind (?ablate=particles)
