@@ -301,6 +301,16 @@ async function main(): Promise<void> {
   const frames = args['frames'] !== undefined
     ? Number(str(args['frames']))
     : Math.max(16, Math.round((u1 - u0) * 11040 * slow));
+  // fail LOUDLY on malformed args: a NaN u0 once produced frames=NaN → the
+  // capture loop ran ZERO iterations and reported a clean "0 events" (the
+  // zsh `for … set -- $seg` word-splitting trap, 2026-07-02) — a silent
+  // no-op probe is worse than a crashed one
+  if (!Number.isFinite(u0) || !Number.isFinite(u1) || u1 <= u0) {
+    throw new Error(`bad span: --u0 ${str(args['u0'])} --u1 ${str(args['u1'])}`);
+  }
+  if (!Number.isFinite(frames) || frames < 16) {
+    throw new Error(`bad frame count: ${frames}`);
+  }
   const scoreThresh = Number(str(args['score']) ?? 8);
   const sustainThresh = Number(str(args['sustain']) ?? 3);
   const tag = str(args['tag']) ?? 'tour';

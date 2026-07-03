@@ -257,14 +257,22 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
   to authored altitude within ±110 m of waypoints (composed low moments
   keep their framing; approaches read as swoops). probe-pops classifies
   simultaneous >2%-of-tiles steps as FLASH events, separate stream.
-  **RE-PROBED the three formerly-flashing segments (lake/forest/karst,
-  quarter-speed, water ablated): ZERO events, ZERO raw detections, ZERO
-  flashes.** Much of the K-4 seed report was likely (a) the tour clipping
-  canopy + (b) K-1 shimmer reading as pops — both now dead. Full-tour
-  coverage of the remaining segments in flight; if clean, flip the battery
-  pops stage from informational to a hard zero-events gate. USER free-flight
-  confirm still required (near lateral content is un-probeable — see probe
-  header).
+  **CORRECTION (same day): the first "ZERO events" segment results were a
+  HARNESS NO-OP** — the zsh `for … in "a b c"; set -- $seg` loop doesn't
+  word-split, the probe got `--u0 "0.0 0.24 a"` → frames=NaN → the capture
+  loop ran zero iterations and printed a clean "0 events"; the grep filter
+  hid the `flying u NaN` line. probe-pops now throws on malformed spans
+  (fail-loud guard added). VALID re-runs: u 0-0.24 at defaults = 15,893 raw
+  detections / 400+ events — real per-tree transition events exist (crops:
+  individual crowns brightening / silhouette-shifting in sustained steps
+  mid-flight, Δ 25-45/255, score 30-50). The canopy-FLASH class is still
+  genuinely dead post-path-fix (valid single-run evidence + crop triage).
+  Discriminating matrix in flight on u 0.14-0.24: baseline vs shadowcache=0
+  (cascade stagger steps under motion are a prime suspect: c2/c3 re-fit
+  every 4/8 frames — discrete far-shadow snaps while flying) vs traa=stock
+  (is the far-rest widened clip box LAGGING legitimate change under slow
+  flight?). Re-tune follows the verdict. Battery pops stage stays
+  INFORMATIONAL until this closes. USER free-flight confirm still required.
 
 - **K-4 INSTRUMENTED — POP PROBE BUILT (2026-07-02, commit c384700).**
   `tools/probe-pops.ts` (v3 §12.2): deterministic flythrough (Bookmarks now
@@ -1068,6 +1076,13 @@ split view, ground-clamped camera helper, silhouette/tiling gate + DELTA.md.
 
 ## Gotchas / lessons learned (append-only)
 
+- zsh `for x in "a b c"; do set -- $x` does NOT word-split $x (bash does) —
+  $1 becomes the whole string and numeric args parse to NaN. Worse: a probe
+  fed NaN can no-op cleanly ("0 events" from a zero-iteration loop) and a
+  grep filter on its output hides the tell. Rules: (1) probes VALIDATE
+  numeric args and throw (probe-pops does now); (2) never grep-filter a
+  probe's output without keeping its parameter-echo line; (3) prefer
+  explicit sequential commands over shell loops for measurement runs.
 - WebGPU secure-context + headless-shell traps → see "Verified environment facts".
 - TSL `.assign()/.addAssign()/.toVar()` require an active stack (inside `Fn()`); material node
   graphs are NOT inside Fn → shared TSL helpers must be pure expression builders (NoiseTSL is).
