@@ -35,6 +35,15 @@ async function main(): Promise<void> {
     return { line: s.slice(0, at).trim(), marker: s.slice(at + 1).trim() };
   });
 
+  // cooled-ABAB protocol: idle the machine BEFORE boot so the absolute
+  // baseline row is comparable to session-start numbers (in-session ABAB
+  // deltas are drift-proof either way)
+  const cooldown = Number(arg('cooldown', '0'));
+  if (cooldown > 0) {
+    console.log(`[bench-run] cooling ${cooldown}s before boot…`);
+    await new Promise((r) => setTimeout(r, cooldown * 1000));
+  }
+
   const { browser } = await launchWebGPU();
   const page = await browser.newPage({ viewport: { width, height } });
   page.on('pageerror', (e) => console.error('[pageerror]', e.message));
