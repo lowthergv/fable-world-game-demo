@@ -205,6 +205,45 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 
 ## Next actions (always keep current)
 
+- **M1 CLOSE — AGENT-SIDE COMPLETE (2026-07-02 evening session, commits
+  14f2e0a..HEAD). AWAITING: user K-confirms + one cooled perf ABAB.**
+  FINAL BATTERY: 5/6 PASS (contact, floors 15.3M/13.6M, shadowcolor
+  luma 26.7/chroma 17.3, temporal bm3 0.412/bm9 0.228 vs ≤0.6 gate,
+  HF 92.6% of 4×SSAA). Pops stage AMBER, fully attributed: the karst
+  near-pass slice (u .62–.68) is un-probeable at tile level (tour passes
+  within meters of spires; flow-check at slow-16 PROVED magnitudes grow,
+  not shrink → informational, covered by user free-flight); the 10 gated
+  events at u<.015 are the K-1 RESIDUAL shimmer class, NOT transitions
+  (verified: alternating-sign per-frame flicker, 2–3× WORSE under
+  ?traa=stock — a real transition would be resolve-invariant). That
+  hotspot was already on K-1's remaining list; acceptance path stays
+  "tune traa_far0 live with user".
+  ALSO THIS SESSION: K-3 ROUND 2 (bm4 vinyl blob = StoneL vertex-density
+  root cause, d1 5/d2 3 + fscale + scatter context gate; bm1/bm6
+  streambeds re-judged clean); bm7 RE-POSED (backlit interior dapple,
+  12-candidate sweep; floors 15.3M ✓); TWO-FRAME TEST run + logged in
+  DELTA.md M1-close section (vista: pass-with-notes, smooth far peaks
+  standing; ravine: honest fail on bank-vegetation density — M8 owns
+  final acceptance); contact sheet re-judged (bm5 green shards + bm8
+  contre-jour = ranked open items in DELTA).
+  PERF: hot-loop spot checks mid-session: bm4 p50 41.7 ms at native
+  WHILE thermally saturated (cooled baseline 42.8–50) — no regression
+  signal at bm4; bm1 read anomalously heavy hot (75 ms vs 27–29
+  baseline) — ATTRIBUTION REQUIRES COOLED ABAB (methodology law). NEXT
+  SESSION FIRST ITEM: cooled ABAB of bm1 with boot knobs for StoneL d2
+  and caster caps (suspects: StoneL R2 5× tris in the boulder-dense
+  gorge, restored far-proxy casters) — add ?stonedetail=/?castercap=
+  for `bench ab`-ability. The 120 fps directive work continues per the
+  ranked queue (cpu.submit cuts).
+  USER CONFIRM CHECKLIST (K-list rule — live, in motion, your viewport):
+  (1) K-1 far flicker: bm3/bm9 at rest + slow pan; also the descent
+      canopy shimmer (tour start, look down) — tune traa_far0 live.
+  (2) K-2 lake rim: bm2 grazing angles through the day.
+  (3) K-3 blob rocks: bm4 foreground + fieldstone gallery + streambeds.
+  (4) K-4 pops: free flight, especially shoreline descents and the
+      karst ridge crossing — dolly+tour clean agent-side (swap class
+      21→0 on the fixed battery).
+
 - **K-4 ROOT-CAUSED AND FIXED (2026-07-02, commit 14f2e0a) — BATTERY RE-RUN + USER CONFIRM PENDING.**
   The deterministic dolly pops were SHADOWS: tree R1 caster onset was
   binary (fade:null) — entering the R1 band swapped a crown's shadow from
