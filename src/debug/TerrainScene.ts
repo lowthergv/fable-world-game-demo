@@ -17,6 +17,12 @@ import { addScatterDebug } from './ScatterDebug';
 import { Forests } from '../vegetation/Forests';
 import { GroundRing } from '../vegetation/GroundRing';
 import { buildVegLibrary } from '../vegetation/VegLibrary';
+import {
+  RtSystem,
+  registerRtConsole,
+  setRtViewTexture,
+  type RtBenchMode,
+} from '../rt/RtSystem';
 import { CausticsBake, setCausticContext } from '../render/Caustics';
 import { setWindContext, windU } from '../render/Wind';
 import { sunU, updateSunUniforms } from '../render/VegMaterials';
@@ -161,10 +167,23 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
 
   // Phase 5: variant pools + GPU cull → compacted indirect draws
   let forestsRef: Forests | null = null;
+  // RT-0 proxy sizing: mean pool height per tree class (scale-1 metres)
+  let rtPoolHeights: number[] | null = null;
   if (view !== 'scatter' && !ablate.has('veg')) {
     const lib = await buildVegLibrary(engine.renderer, seed, (p, m) =>
       ctx.progress(0.963 + p * 0.006, m),
     );
+    {
+      const sum = new Array<number>(6).fill(0);
+      const cnt = new Array<number>(6).fill(0);
+      for (const p of lib.pools) {
+        if (p.cls < 6) {
+          sum[p.cls] = (sum[p.cls] ?? 0) + p.height;
+          cnt[p.cls] = (cnt[p.cls] ?? 0) + 1;
+        }
+      }
+      rtPoolHeights = sum.map((s, c) => ((cnt[c] ?? 0) > 0 ? s / (cnt[c] as number) : 14));
+    }
     const forests = new Forests(
       hf,
       scatter,
@@ -216,11 +235,40 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   );
   // cascade cameras drive the per-cascade caster cull in Forests
   forestsRef?.setCSM(shadowRig.csm ?? null);
+
+  // RT-0 (M2, v3 §7): BVH over terrain tiles + tree proxies. Lazy — nothing
+  // builds or dispatches unless ?view=rt is up or `rt build|bench` runs, so
+  // base-tier pixels and boot cost are untouched.
+  const rtSys = new RtSystem(
+    hf,
+    scatter.trees,
+    rtPoolHeights ? { heights: rtPoolHeights } : null,
+    engine.stats,
+    {
+      set: (on) => {
+        engine.hold = on;
+      },
+    },
+  );
+  registerRtConsole(rtSys, engine.renderer, engine.camera);
+  if (view === 'rt') {
+    const canvas = engine.renderer.domElement as HTMLCanvasElement;
+    setRtViewTexture(rtSys.ensureDebugTex(canvas.width, canvas.height));
+    engine.onUpdate(() => rtSys.tickDebug(engine.renderer, engine.camera));
+  }
+
   (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg = {
     engine,
     sunSky,
     shadowRig,
     forests: forestsRef,
+    rt: {
+      sys: rtSys,
+      build: () => rtSys.build(engine.renderer),
+      bench: (mode: RtBenchMode, opts?: { w?: number; h?: number; runs?: number }) =>
+        rtSys.bench(engine.renderer, engine.camera, mode, opts),
+      stats: () => rtSys.statsLine(),
+    },
   };
 
   // GPU particles: snow/pollen/leaves riding the wind (?ablate=particles)

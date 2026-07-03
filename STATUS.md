@@ -214,6 +214,55 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 
 ## Next actions (always keep current)
 
+- **M2 RT-0 LANDED (2026-07-03) — BVH + rt_debug + Mrays/s TABLE (gate item 1 ✓).**
+  New `src/rt/`: RtBvh.ts (binned-SAH over 16,384 terrain tiles + 188,713
+  tree proxies = 205k prims → 141k nodes, depth 22, 214 ms CPU one-time at
+  first use; trunk capsule + crown ellipsoid per instance from pool heights
+  × instance scale, crown Rxz ×1.04 wind inflation), RtTrace.ts (raw-WGSL
+  stackful traversal via wgslFn ptr params — slab/capsule/ellipsoid
+  intersectors + per-texel heightfield march w/ 6-step bisect inside tile
+  leaves), RtSystem.ts (lazy build from a one-time scatter readback; debug
+  StorageTexture; benchmark). CPU topology / GPU traversal split = D-6 in
+  DEVIATIONS.md (scene static, wind by proxy inflation — refit binds fauna
+  work, not RT-0). Console: `rt build|stats|bench [mode|all]`, cvar
+  `rt_debug` 1/2/3 (hit-shade / BVH heatmap / prim kind); `?view=rt` boots
+  the live ray-cast view through PostStack (module-context texture, raw —
+  base default path byte-identical: branch only evaluates when the param
+  is set). Tool: `tools/probe-rt.ts` (markdown table + JSON to
+  shots/wip/rt/). Debug shots: shots/wip/rt/smoke-*.png (bm3 hit view,
+  bm7 interior + heatmap — proxies align with the raster forest).
+  **MEASUREMENT LAW for compute benches: hold the frame loop (Engine.hold —
+  new) and batch N dispatches per readback fence. The first run timed
+  ~130 ms/dispatch flat across ray counts — that was the native-res scene
+  render serializing between awaited dispatches, not kernel time.**
+  **MRAYS/S TABLE (native 2592×1676, M1 Max, frozen bookmarks, med of 8×
+  8-batch samples; secondary modes trace primary-hit lanes at half res):**
+  | bm | mode | Mrays traced | ms (med) | Mrays/s |
+  |----|------|-------------|----------|---------|
+  | 1 gorge stream    | primary | 4.34 | 8.09  | 537 |
+  | 3 golden vista    | primary | 4.34 | 13.08 | 332 |
+  | 3 golden vista    | shadow  | 0.79 | 2.66  | 298 |
+  | 3 golden vista    | reflect | 0.79 | 6.11  | 130 |
+  | 3 golden vista    | ao(50m) | 0.79 | 3.35  | 237 |
+  | 3 golden vista    | incoh   | 0.79 | 4.94  | 161 |
+  | 7 forest interior | primary | 4.34 | 6.51  | 667 |
+  | 7 forest interior | shadow  | 1.07 | 1.03  | 1044 |
+  | 7 forest interior | ao(50m) | 1.07 | 3.14  | 341 |
+  | 2 lake grazing    | primary | 4.34 | 7.68  | 566 |
+  | 2 lake grazing    | reflect | 0.77 | 3.86  | 200 |
+  CALIBRATION READ (v3 §7 "this number calibrates everything after"):
+  RT-1 water reflections ≈ the reflect rows → ~4–6 ms/frame at half res on
+  lake framings = fits the HIGH tier budget comfortably (base tier
+  untouched). RT-2 shadow rays are cheap where CSM is weakest (any-hit
+  ~1–3 ms half-res). RT-3 AO-class rays ~3 ms half-res — plausible ultra.
+  Vista primary (13 ms) is the ceiling case: long tile marches dominate;
+  candidate optimizations if RT-1 needs them: coarse-mip height march in
+  far tiles, 4-wide BVH. NOT DONE (deliberate): GPU refit kernel (D-6).
+  NEXT: K-1 carried fix (history-confidence TRAA — patch drafted, premise
+  correction: velocity can't gate wind [analytic reprojection is camera-
+  only]; the discriminator is alternating-vs-persistent clip direction at
+  rest — see the K-1 entry), then RT-1.
+
 - **M1 CLOSED WITH ONE EXCEPTION (2026-07-03) — USER K-CONFIRMS IN.
   Current focus → M2 (RT foundation + reflections).**
   User live confirms (their viewport, in motion — K-list rule):

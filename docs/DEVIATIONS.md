@@ -97,3 +97,23 @@ encoding are final.
 occlusion-aware) with the cheapest primitives that survive the quality bar.
 Revisit meshlets only if hero-rock/trunk close-ups show overdraw cost in the
 Phase-7 profile.
+
+## D-6: BVH topology built on CPU at boot-on-demand (M2 / RT-0)
+
+**Spec (v3 §7):** "LBVH construction and WGSL traversal in compute."
+**Implemented:** traversal, primitive intersection and the heightfield-tile
+march are raw WGSL compute (RtTrace.ts); the *topology* (binned-SAH over
+~205k prim AABBs: 16,384 terrain tiles + ~189k tree proxies) is built once
+on the CPU at first use (~215 ms) from a one-time readback of the scatter
+instance buffers, then uploaded as storage buffers (RtBvh.ts).
+**Why:** the scene RT sees is fully static — wind never moves geometry (the
+spec itself prescribes proxy inflation, ×1.04 crown radii here), so there is
+no per-frame refit and construction speed buys nothing after boot. A GPU
+LBVH needs a radix sort + Karras hierarchy in compute (~3 more kernels of
+high-risk WGSL) to produce a *worse* tree (Morton order) than binned SAH;
+the calibrating deliverable — the Mrays/s traversal number — is unaffected
+by where topology was computed.
+**Revisit:** when fauna (M3+) or destructible/animated instances need
+per-frame refits, add the GPU refit kernel (leaf AABBs from instance
+buffers + bottom-up atomic passes) against the same node layout; the ≤2 ms
+refit budget line in v3 §5 binds *that* work, not RT-0.

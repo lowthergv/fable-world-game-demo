@@ -138,7 +138,19 @@ export class Engine {
     void this.renderer.setAnimationLoop((timeMs) => this.frame(timeMs));
   }
 
+  /**
+   * When true the frame loop idles (no updates, no render, no stats).
+   * Benchmarks that time raw compute dispatches set this so scene frames
+   * don't interleave with (and serialize against) the timed queue work.
+   * NOTE: settle() stalls while held — release before awaiting settles.
+   */
+  hold = false;
+
   private frame(timeMs: number): void {
+    if (this.hold) {
+      this.lastT = null; // don't integrate the held span into dt on resume
+      return;
+    }
     const t = timeMs / 1000;
     const rawDt = this.lastT === null ? 1 / 60 : t - this.lastT;
     this.lastT = t;

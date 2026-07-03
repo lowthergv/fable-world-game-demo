@@ -14,6 +14,7 @@ import { AgXToneMapping, Matrix4, NoToneMapping, Vector2, Vector3 } from 'three'
 import type { Renderer, StorageBufferNode } from 'three/webgpu';
 import { RenderPipeline } from 'three/webgpu';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { getRtViewTexture } from '../rt/RtSystem';
 import { traa } from 'three/addons/tsl/display/TRAANode.js';
 import {
   Fn,
@@ -76,7 +77,10 @@ export class PostStack {
     const ablate = new Set((q.get('ablate') ?? '').split(','));
     // debug probes need raw values — tone mapping would garble them
     const skyveldbg = q.get('skyveldbg') !== null && q.get('skyveldbg') !== '';
-    renderer.toneMapping = cloudview || skyveldbg ? NoToneMapping : AgXToneMapping;
+    // ?view=rt — display the RT-0 debug ray-cast raw (no tone map / grade);
+    // texture registered by TerrainScene via setRtViewTexture BEFORE we build
+    const rtViewTex = q.get('view') === 'rt' ? getRtViewTexture() : null;
+    renderer.toneMapping = cloudview || skyveldbg || rtViewTex ? NoToneMapping : AgXToneMapping;
     renderer.toneMappingExposure = 1.0;
     const frameU = runiform(0);
     // The post quad pass binds its own orthographic camera: `cameraPosition`,
@@ -631,7 +635,8 @@ export class PostStack {
     // chain bisect: 9 = constant at pipeline output, 8 = aerial only (no
     // AO/TRAA/bloom/exposure/grade), default = full chain
     this.post.outputNode =
-      skyVelDbgView !== null ? skyVelDbgView
+      rtViewTex !== null ? texture(rtViewTex, screenUV)
+      : skyVelDbgView !== null ? skyVelDbgView
       : cloudview === '9' ? vec3(1, 0, 0)
       : cloudview !== null && cloudview !== '' ? aerialNode
       : graded;
