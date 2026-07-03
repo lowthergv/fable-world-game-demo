@@ -5,8 +5,9 @@
  *
  * Keys 1–9 jump to a bookmark (pose + ToD); ?shot=N boots into one.
  * ?fly=1 (or key F) runs a looping ~90 s Catmull-Rom flythrough through
- * a subset of the bookmarks at a fixed golden-hour ToD; the fly camera's
- * ground/water clamps keep the path out of terrain and water.
+ * a subset of the bookmarks; the tour curve is clearance-enforced at build
+ * time (see buildTourCurve — the raw spline used to tunnel terrain and
+ * skim canopy, and the fly rig's soft clamp only masked it).
  */
 
 import type { PerspectiveCamera } from 'three';
