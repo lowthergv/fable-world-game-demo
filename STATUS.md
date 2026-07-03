@@ -205,6 +205,32 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 
 ## Next actions (always keep current)
 
+- **K-4 DEEP TRIAGE — STATE + EXACT CONTINUATION (2026-07-02 end of session).**
+  Instruments now in place: pop probe (tour + DOLLY mode + flash class +
+  fail-loud arg guards), probe-clearance, pop-crop. FINDINGS, all verified:
+  (a) tour path fixed (was underground/through-canopy — biggest visible
+  "pop" source, whole-frame flashes, DEAD post-fix per valid tour runs);
+  (b) golden-hour tile events are dominated by WORLD-FIXED SHADOW-BOUNDARY
+  SWEEPS under camera motion (crop-verified) — real image motion, NOT pops:
+  tile-level detection can't separate them, hence probe default T=12;
+  (c) noon dapple-arrival is the analogous noon confound;
+  (d) a REAL instant-pop class exists: DETERMINISTIC per-object transitions
+  (dolly repro at fixed frames f=58/329/643/920 from cam
+  "-11,283,1330,1.27,-0.06" speed 0.06, Δ 38-50/255, crops saved in
+  shots/wip/pops/dolly-*) — INVARIANT to occlusion march, compact caps,
+  cascade stagger, TRAA resolve, and band widths (all tested by direct
+  experiment this session). Suspects remaining: understory/extras single-
+  ring fades, grass-ring cell quantization, per-instance variant state.
+  (e) noon-only repeating flashes at u≈0.237 (~78 tiles, Δ20-26): NOT
+  stagger, NOT exposure (lockexp verified airtight) — unexplained.
+  CONTINUATION (next session): (1) SINGLE-BOOT pair capture at dolly f=918
+  vs 924 (two-boot shots confound grass-torus init center — the chunky
+  two-boot diffs in shots/wip/pops/dolly-f920-pair.png may be boot
+  artifacts; the single-boot dolly delta is single-shrub-sized);
+  (2) ?clsdbg=1 at that framing to identify the popping class; (3) fix that
+  class's transition, re-run the dolly battery. K-4 acceptance: dolly
+  pushes clean + tour flash-free + user free-flight confirm.
+
 - **K-1 TOP CONTRIBUTOR FIXED — CUSTOM TRAA RESOLVE (2026-07-02, commit fe846ac).**
   `src/render/TraaResolve.ts` replaces stock TRAANode (`?traa=stock` = A/B
   escape hatch; identical halton sequence + view-offset lifecycle + analytic-
