@@ -93,8 +93,14 @@ interface PopResult {
   rawDetections: number;
   /** first ≤24 events with before/at/after crop strips (data URLs) */
   crops: (PopEvent & { png: string })[];
-  /** whole-frame steps (camera-through-canopy, sun reveal, global change) */
-  flashes: { frame: number; u: number; tiles: number; meanS: number }[];
+  /**
+   * whole-frame steps (camera-through-canopy, sun reveal, global change).
+   * meanJ discriminates: a REAL flash is a 1-frame step (meanJ ≈ meanS);
+   * a coherent noon dapple-sweep crossing many tiles together ramps over
+   * several frames (meanJ ≪ meanS) — the u≈0.237 false-positive class,
+   * phase-locked to camera position across boots/ablations (2026-07-02).
+   */
+  flashes: { frame: number; u: number; tiles: number; meanS: number; meanJ: number }[];
 }
 
 function pageScript(opts: {
@@ -217,10 +223,12 @@ function pageScript(opts: {
   };
   const poseAt = (f) => (O.dolly ? dollyPose(f) : dbg.flyPose(O.u0 + f * du));
   // pre-roll at the segment start: the pose jump from spawn re-converges
-  // TRAA history (~33+ frames at the far-rest weight floor) — without this
-  // the first events are fake
+  // TRAA history (~33+ frames at the far-rest weight floor) AND the probe-GI
+  // field (time-sliced, ~2 s ≈ 240 frames for a full refresh after a pose
+  // jump) — 120 left a GI convergence tail that read as floor-dapple SWAP
+  // events in the first ~500 frames of a segment (2026-07-02 tour triage)
   hk.setPose(poseAt(0));
-  await hk.settle(120);
+  await hk.settle(300);
   for (let f = 0; f < O.frames; f++) {
     const pose = poseAt(f);
     hk.setPose(pose);
@@ -287,6 +295,7 @@ function pageScript(opts: {
       flashes.push({
         frame: t, u: O.u0 + t * du, tiles: frameHits.length,
         meanS: frameHits.reduce((s, h) => s + h.S, 0) / frameHits.length,
+        meanJ: frameHits.reduce((s, h) => s + h.J, 0) / frameHits.length,
       });
       continue;
     }
@@ -410,7 +419,9 @@ async function main(): Promise<void> {
   );
   for (const fl of res.flashes.slice(0, 10)) {
     console.log(
-      `  FLASH u=${fl.u.toFixed(4)} f=${fl.frame}  ${fl.tiles} tiles  meanΔ=${fl.meanS.toFixed(1)}`,
+      `  FLASH u=${fl.u.toFixed(4)} f=${fl.frame}  ${fl.tiles} tiles  ` +
+        `meanΔ=${fl.meanS.toFixed(1)} meanJ=${fl.meanJ.toFixed(1)}` +
+        (fl.meanJ < 0.5 * fl.meanS ? '  (ramp — dapple-sweep class)' : '  (STEP)'),
     );
   }
   for (const e of res.events.slice(0, Number(str(args['maxevents']) ?? 25))) {

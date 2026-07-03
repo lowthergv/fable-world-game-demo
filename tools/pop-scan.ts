@@ -41,7 +41,17 @@ async function main(): Promise<void> {
   const fa = Number(str(args['fa']));
   const fb = Number(str(args['fb']));
   const px = (str(args['px']) ?? '').split(',').map(Number);
-  if (cam.length < 5 || cam.some((n) => !Number.isFinite(n))) {
+  // --tour "u0,du": frame f poses at flyPose(u0 + f*du) instead of a dolly
+  // (match a probe-pops tour run: du = (u1-u0)/frames of that run)
+  let tour: { u0: number; du: number } | null = null;
+  if (args['tour'] !== undefined) {
+    const t = (str(args['tour']) ?? '').split(',').map(Number);
+    if (t.length !== 2 || t.some((n) => !Number.isFinite(n))) {
+      throw new Error('need --tour "u0,du"');
+    }
+    tour = { u0: t[0]!, du: t[1]! };
+  }
+  if (!tour && (cam.length < 5 || cam.some((n) => !Number.isFinite(n)))) {
     throw new Error('need --cam "x,y,z,yaw,pitch"');
   }
   if (!Number.isFinite(fa) || !Number.isFinite(fb) || fb <= fa) {
@@ -54,7 +64,7 @@ async function main(): Promise<void> {
   const width = Number(str(args['w']) ?? 2592);
   const height = Number(str(args['h']) ?? 1676);
 
-  const consumed = new Set(['cam', 'speed', 'fa', 'fb', 'px', 'settle', 'w', 'h', 'T']);
+  const consumed = new Set(['cam', 'speed', 'fa', 'fb', 'px', 'settle', 'w', 'h', 'T', 'tour']);
   const extra: Record<string, string> = { wind: '0', lockexp: '1' };
   for (const [k, v] of Object.entries(args)) {
     if (!consumed.has(k)) extra[k] = v === true ? '1' : String(v);
@@ -76,7 +86,7 @@ async function main(): Promise<void> {
   const bootErr = await page.evaluate(() => window.__laas.error);
   if (bootErr) throw new Error(bootErr);
 
-  const O = { cam, speed, fa, fb, px, settle };
+  const O = { cam, speed, fa, fb, px, settle, tour };
   const script = `(async () => {
   const O = ${JSON.stringify(O)};
   const hk = window.__laas;
@@ -94,10 +104,18 @@ async function main(): Promise<void> {
     Math.sin(pitch),
     -Math.cos(yaw) * Math.cos(pitch),
   ];
-  const poseAt = (f) => ({
-    p: [O.cam[0] + fwd[0] * f * O.speed, O.cam[1] + fwd[1] * f * O.speed, O.cam[2] + fwd[2] * f * O.speed],
-    yaw, pitch,
-  });
+  // tour mode: frame index maps to the tour spline via __laasDbg.flyPose
+  // (same mapping as probe-pops tour runs: u = u0 + f * du)
+  const dbg0 = window.__laasDbg;
+  const poseAt = O.tour
+    ? (f) => {
+        if (!dbg0 || typeof dbg0.flyPose !== 'function') throw new Error('flyPose missing');
+        return dbg0.flyPose(O.tour.u0 + f * O.tour.du);
+      }
+    : (f) => ({
+        p: [O.cam[0] + fwd[0] * f * O.speed, O.cam[1] + fwd[1] * f * O.speed, O.cam[2] + fwd[2] * f * O.speed],
+        yaw, pitch,
+      });
   hk.setPose(poseAt(O.fa));
   await hk.settle(120);
   const dbg = window.__laasDbg;

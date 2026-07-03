@@ -164,14 +164,19 @@ function pops(fast: boolean): StageResult {
     }
     const j = JSON.parse(readFileSync(`shots/wip/pops/${tag}-events.json`, 'utf8')) as {
       events: { sustained: number; jump: number }[];
-      flashes: unknown[];
+      flashes: { meanS: number; meanJ?: number }[];
     };
     const segSwaps = j.events.filter(
       (e) => e.sustained >= 20 && e.jump >= 0.5 * e.sustained,
     ).length;
+    // step-flashes only: coherent dapple sweeps ramp (meanJ ≪ meanS) and are
+    // real image motion, not defects (u≈0.237 triage 2026-07-02)
+    const segFlashes = j.flashes.filter(
+      (f) => (f.meanJ ?? f.meanS) >= 0.5 * f.meanS,
+    ).length;
     swaps += segSwaps;
-    flashes += j.flashes.length;
-    details.push(`u ${s.u0}→${s.u1}: ${segSwaps} swaps, ${j.flashes.length} flashes (${j.events.length} raw events)`);
+    flashes += segFlashes;
+    details.push(`u ${s.u0}→${s.u1}: ${segSwaps} swaps, ${segFlashes} step-flashes (${j.events.length} events, ${j.flashes.length} raw flashes)`);
   }
   return {
     name: 'pops',

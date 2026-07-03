@@ -235,9 +235,21 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
   survivors are jump≪sustained (4-5 vs 13-15) = crossfade RAMPS working
   as designed in low-noise corner tiles, NOT swaps. Flashes 0. The
   instant-swap class (jump≈sustained, Δ38-50) is ERADICATED on the dolly.
-  REMAINING FOR K-4 CLOSE: tour u 0-0.24 re-run (in flight) incl. the
-  noon u≈0.237 ~78-tile flash check (suspected same caster-onset class)
-  + USER free-flight confirm (K-list rule).
+  TOUR u 0-0.24 RE-RUN + THE u≈0.237 MYSTERY SOLVED (same day): the
+  "noon-only repeating ~78-tile flashes" are NOT a defect — tour-mode
+  pop-scan at the flash zone shows smooth ±1-2/frame luma WAVES
+  (~20-frame period), phase-locked to camera position across THREE
+  different boots/ablation sets (caustics ✗, froxels ✗, water+particles
+  ✗) with zero 1-frame steps: coherent noon DAPPLE-SWEEP rows sliding
+  under the descending camera, tripping the >2%-tiles flash heuristic.
+  probe-pops flashes now record meanJ; battery gates only STEP-flashes
+  (meanJ ≥ 0.5·meanS). Tour early-segment (u<0.013) floor-dapple "swaps"
+  = GI convergence tail after the 120-frame pre-roll → pre-roll now 300
+  (GI slice refresh ≈240 frames). Tour raw detections rose 15.9k→37.2k
+  post-fix — expected: the caster-cap fix RESTORED ~half the far crown
+  shadows, so there is legitimately more dapple to sweep.
+  REMAINING FOR K-4 CLOSE: battery pops gate green + USER free-flight
+  confirm (K-list rule).
 
 - **K-4 DEEP TRIAGE — STATE + EXACT CONTINUATION (2026-07-02 end of session).**
   Instruments now in place: pop probe (tour + DOLLY mode + flash class +
