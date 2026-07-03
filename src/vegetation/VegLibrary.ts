@@ -55,6 +55,14 @@ export interface VegPool {
   r0?: PoolPart[] | null;
   r1: PoolPart[] | null;
   r2: PoolPart[] | null;
+  /**
+   * Perf-attribution twin for r2 (StoneL only): the pre-K-3 d2=2 geometry.
+   * Forests adds it as hidden sibling draws in the SAME compact group; the
+   * `stonedetail` cvar swaps visibility so `bench ab` can price the K-3
+   * vertex-density bump in-session (cooled-ABAB methodology). Never visible
+   * together with r2.
+   */
+  r2Alt?: PoolPart[] | null;
   trisR1: number;
   trisR2: number;
   /** cull-sphere data (from geometry bounds, conservative over parts) */
@@ -491,6 +499,14 @@ export async function buildVegLibrary(
         sc.d2 !== null
           ? buildRock(preset, seed.rng(`veg/stone${sc.cls}/${v}`), sc.d2)
           : null;
+      // StoneL perf-attribution twin: the pre-K-3 d2=2 geometry (same rng
+      // stream = same shape, coarser mesh) for the `stonedetail` cvar —
+      // R2 reaches 900 m at cap 24576, the prime suspect for the bm1 hot
+      // read (STATUS 2026-07-02). Boots hidden unless ?stonedetail=2.
+      const loAlt =
+        sc.cls === VegClass.StoneL
+          ? buildRock(preset, seed.rng(`veg/stone${sc.cls}/${v}`), 2)
+          : null;
       const b = bounds([hi.geometry]);
       trackCls(sc.cls, b.height, b.radius);
       pools.push({
@@ -509,6 +525,16 @@ export async function buildVegLibrary(
               {
                 geo: lo.geometry,
                 tris: lo.stats.tris,
+                make: () => rockMaterial({ moss, tone }),
+                castShadow: sc.cls === VegClass.StoneL,
+              },
+            ]
+          : null,
+        r2Alt: loAlt
+          ? [
+              {
+                geo: loAlt.geometry,
+                tris: loAlt.stats.tris,
                 make: () => rockMaterial({ moss, tone }),
                 castShadow: sc.cls === VegClass.StoneL,
               },

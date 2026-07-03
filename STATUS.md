@@ -205,8 +205,58 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 
 ## Next actions (always keep current)
 
+- **bm1 HOT-READ ANOMALY RESOLVED — THERMAL, NO REGRESSION (2026-07-03,
+  commit 0803ee7+). The cooled-ABAB blocker on M1 is CLEARED; the gate now
+  waits on user K-confirms only.**
+  Ran the prescribed cooled ABAB at bm1 native 2592×1676 (180 s idle →
+  boot → `bench 12` → both knob ABABs → closing `bench 12`, one session):
+  - ABSOLUTE COOLED: p50 25.0 ms wall (~35 fps), cpu.submit 10.2,
+    gpu-sum 41.0 — identical first and last row (thermally stable run).
+    vs baselines: 29.1 (2026-06-13 cooled, prof-era) / 27.2 (prof-fix
+    verification, no-prof). Today's run is prof=1 (harness default), so
+    the true no-prof wall is ≤25.0 — bm1 is FASTER than every baseline.
+    (The p90 58.3 spike mode ≈ every 3-4 frames is the KNOWN ?prof=1
+    timestamp-resolve serialization — see the 2026-07-02 prof entry;
+    don't mistake it for a regression when reading bench rows.)
+  - `bench ab stonedetail 3 2 8`: Δp50 −0.00 ms (25.0 → 25.0). The K-3
+    StoneL d2 2→3 vertex-density bump costs NOTHING at bm1 (gpu median
+    41.0→~40.0 in the B rounds — not the wall bottleneck).
+  - `bench ab castercap 24576 8192 8`: Δp50 0.00 ms. The K-4 caster-cap
+    fix (restored ~half the far crown shadows) costs NOTHING at bm1.
+  - VERDICT: the mid-session 75 ms read was thermal saturation, exactly
+    the failure mode the methodology law predicts. Both suspects
+    exonerated by direct experiment.
+  NEW INSTRUMENTS (all committed):
+  - `stonedetail` cvar (+?stonedetail= boot): pre-K-3 d2=2 StoneL R2
+    twin draws (hidden siblings, same compact groups, main + 4 cascade
+    casters per variant), visibility-swapped live; groupTris follows so
+    veg.tris stays truthful. Default = pixel-identical (722 draws /
+    16.78M tris unchanged at bm1).
+  - `castercap` cvar (+?castercap= boot): live uniform clamp on the
+    impostor-band crown-proxy caps in the INDIRECT kernel only — appends
+    still fill the boot allocation, so the drawn set reproduces the
+    pre-fix append-order drop exactly. effCap mirrored in veg.capOver +
+    debugCounters (capOver > 0 while lowered is EXPECTED, by design).
+  - tools/knob-check.ts: same-boot A→B→A knob verification. Cross-boot
+    shot diffs at bm1/bm4 are 2-7% >12/255 of pure noise (caustic
+    wall-clock phase — SURVIVES ?ablate=water, needs ?ablate=caustics;
+    exposure convergence; wind sways under ?freeze). Rest recipe
+    (wind 0 + lockexp + ablate caustics + frame%1024 alignment + 320-
+    frame GI pre-roll) collapses the floor to ~0.2% (worst residual tile
+    = the fps HUD chip). Knob proof: veg.tris 12,925,270 → 12,780,310 →
+    back (Δ 144,960 = the twin swap); castercap readback 24576 → 8192 →
+    back with 3 imp-band groups overflowing at 8192.
+  - tools/bench-run.ts: headless driver typing bench/bench-ab lines into
+    the dev console (`--shot N --w --h --cooldown S --cmds "line@marker;…"`)
+    — the binding ABAB methodology, scriptable.
+  NEXT AGENT WORK (when picked up): the 120 fps directive ranked queue
+  (cpu.submit cuts — 10.2 ms at bm1 native is the biggest CPU term);
+  K-1 residual probes (`--ablate gi` dotted-ring attribution) per the
+  K-1 entry below.
+
 - **M1 CLOSE — AGENT-SIDE COMPLETE (2026-07-02 evening session, commits
-  14f2e0a..HEAD). AWAITING: user K-confirms + one cooled perf ABAB.**
+  14f2e0a..HEAD). AWAITING: user K-confirms (cooled bm1 ABAB DONE
+  2026-07-03 — no regression, see entry above).**
   FINAL BATTERY: 5/6 PASS (contact, floors 15.3M/13.6M, shadowcolor
   luma 26.7/chroma 17.3, temporal bm3 0.412/bm9 0.228 vs ≤0.6 gate,
   HF 92.6% of 4×SSAA). Pops stage AMBER, fully attributed: the karst
@@ -229,12 +279,11 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
   PERF: hot-loop spot checks mid-session: bm4 p50 41.7 ms at native
   WHILE thermally saturated (cooled baseline 42.8–50) — no regression
   signal at bm4; bm1 read anomalously heavy hot (75 ms vs 27–29
-  baseline) — ATTRIBUTION REQUIRES COOLED ABAB (methodology law). NEXT
-  SESSION FIRST ITEM: cooled ABAB of bm1 with boot knobs for StoneL d2
-  and caster caps (suspects: StoneL R2 5× tris in the boulder-dense
-  gorge, restored far-proxy casters) — add ?stonedetail=/?castercap=
-  for `bench ab`-ability. The 120 fps directive work continues per the
-  ranked queue (cpu.submit cuts).
+  baseline) — ATTRIBUTION REQUIRES COOLED ABAB (methodology law).
+  [DONE 2026-07-03: cooled ABAB ran with the new ?stonedetail=/
+  ?castercap= knobs — both suspects exonerated, bm1 cooled p50 25.0 ms,
+  anomaly was thermal. See the 2026-07-03 entry above.] The 120 fps
+  directive work continues per the ranked queue (cpu.submit cuts).
   USER CONFIRM CHECKLIST (K-list rule — live, in motion, your viewport):
   (1) K-1 far flicker: bm3/bm9 at rest + slow pan; also the descent
       canopy shimmer (tour start, look down) — tune traa_far0 live.

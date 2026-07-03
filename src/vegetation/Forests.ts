@@ -65,6 +65,7 @@ import {
   instanceIndex,
   instancedArray,
   int,
+  min,
   normalWorld,
   positionLocal,
   positionWorld,
@@ -79,6 +80,7 @@ import {
   vec4,
 } from 'three/tsl';
 import type { Heightfield } from '../world/Heightfield';
+import { numCvar } from '../debug/Console';
 import { hash12 } from '../gpu/noise/NoiseTSL';
 import type { ProbeGI } from '../gpu/passes/ProbeGI';
 import { canopyAt, type ScatterLayer, type ScatterResult } from '../gpu/passes/Scatter';
@@ -120,6 +122,18 @@ const MAIN_GROUPS = 170;
 const CASC_LOCALS = 142;
 const CASCADES = 4;
 const GROUPS = MAIN_GROUPS + CASCADES * CASC_LOCALS;
+/**
+ * Impostor-band crown-proxy caster allocation (per cls per cascade). The
+ * `castercap` cvar can LOWER the effective cap live (?castercap= boots it)
+ * so `bench ab castercap 24576 8192` prices the K-4 cap fix's restored far
+ * crown shadows in-session; allocation itself never changes at runtime
+ * (compact-region offsets are fixed at boot).
+ */
+const CAP_IMP_BAND = 24576;
+/** is group g an impostor-band crown-proxy caster group? (locals 136..141) */
+function isImpBandGroup(g: number): boolean {
+  return g >= MAIN_GROUPS && (g - MAIN_GROUPS) % CASC_LOCALS >= 136;
+}
 /** crown-proxy shadows fade out across this band (m from camera) */
 const IMP_CAST_FADE0 = 620;
 const IMP_CAST_FAR = 1100;
@@ -170,7 +184,9 @@ function capOf(g: number): number {
     // shadows popped in/out as membership churn reshuffled which chunk fell
     // past the cap (K-4 root cause, 2026-07-02). Overflow now surfaces as
     // veg.capOver in the HUD — never let this go silent again.
-    if (local >= 136) return 24576;
+    // (`castercap` cvar lowers the EFFECTIVE cap live for perf attribution —
+    // drawn membership then matches the pre-fix drop exactly.)
+    if (local >= 136) return CAP_IMP_BAND;
     if (local < 48) return local % 2 === 0 ? 3072 : 6144; // tree r1/r2
     if (local < 72) return CAP_HERO;
     const pe = (local - 72) >> 1;
@@ -290,6 +306,17 @@ export class Forests {
   private reading = false;
   private frame = 0;
   private hud: Record<string, number> = {};
+  // perf-attribution knobs (STATUS 2026-07-02 bm1 hot-read triage) — both
+  // default to shipping behavior; A/B via `bench ab stonedetail 3 2` /
+  // `bench ab castercap 24576 8192`.
+  /** StoneL R2 detail in effect: 3 = K-3 fix (d2:3), 2 = pre-K-3 twin */
+  private stoneDetail: 2 | 3 = 3;
+  /** live effective cap for impostor-band crown-proxy caster groups */
+  private capImp = CAP_IMP_BAND;
+  private capImpU = uniform(CAP_IMP_BAND);
+  private stoneHi: Mesh[] = [];
+  private stoneLo: Mesh[] = [];
+  private stonePairs: { g: number; hiTris: number; loTris: number }[] = [];
 
   constructor(
     private hf: Heightfield,
@@ -325,6 +352,15 @@ export class Forests {
     void renderer;
     this.group.add(this.prepassGroup);
     const lib = this.lib;
+
+    // boot values for the perf-attribution knobs (cvars registered below)
+    const bootQ = new URLSearchParams(window.location.search);
+    if (bootQ.get('stonedetail') === '2') this.stoneDetail = 2;
+    const ccQ = Number(bootQ.get('castercap') ?? NaN);
+    if (Number.isFinite(ccQ)) {
+      this.capImp = Math.min(Math.max(Math.round(ccQ), 64), CAP_IMP_BAND);
+    }
+    this.capImpU.value = this.capImp;
 
     // ---- compact regions / group tables ------------------------------------
     const offsets = new Uint32Array(GROUPS);
@@ -370,7 +406,7 @@ export class Forests {
       g: number,
       tris: number,
       shadowLayer: number | null = null,
-    ): void => {
+    ): Mesh => {
       const indexCount = geo.index ? geo.index.count : geo.attributes.position?.count ?? 0;
       draws.push({ group: g, indexCount });
       const mesh = new Mesh(geo, mat);
@@ -413,6 +449,7 @@ export class Forests {
       }
       meshes.push(mesh);
       this.group.add(mesh);
+      return mesh;
     };
 
     /** geometry view sharing attributes/index but with its own indirect slot */
@@ -492,10 +529,14 @@ export class Forests {
 
     for (const pool of lib.pools) {
       const layer = layerOf(pool.cls);
-      const rings: { ring: 0 | 1 | 2; parts: typeof pool.r1 }[] = [];
+      const rings: { ring: 0 | 1 | 2; parts: typeof pool.r1; alt?: boolean }[] = [];
       if (pool.r0) rings.push({ ring: 0, parts: pool.r0 });
       if (pool.r1) rings.push({ ring: 1, parts: pool.r1 });
       if (pool.r2) rings.push({ ring: 2, parts: pool.r2 });
+      // `stonedetail` twin (StoneL): same group/fade/materials, different
+      // geometry — visibility-swapped live, so the cull/compact path is
+      // shared and only raster+vertex cost differs between A and B
+      if (pool.r2Alt) rings.push({ ring: 2, parts: pool.r2Alt, alt: true });
       // shadow budget: tree rings 0–2 cast (per-cascade caster lists);
       // understory is grounded by contact shadows + AO instead.
       // ?ablate=casters drops ALL veg caster draws (perf attribution).
@@ -549,9 +590,23 @@ export class Forests {
           : pool.cls < 15
             ? { k: 1, freq: 1.8, h0: 0.9 }
             : undefined;
-      for (const { ring, parts } of rings) {
+      for (const { ring, parts, alt } of rings) {
         if (!parts) continue;
         const g = groupOf(pool.cls, pool.variant, ring);
+        // stonedetail pair draws (hi = r2, lo = r2Alt): boot with the chosen
+        // set visible; the pair group's groupTris is ASSIGNED by
+        // setStoneDetail below (not accumulated via addDraw) so veg.tris
+        // always reflects the active geometry only
+        const pairRing = ring === 2 && !!pool.r2Alt;
+        const pairActive = alt ? this.stoneDetail === 2 : this.stoneDetail === 3;
+        const pairMeshes = alt ? this.stoneLo : this.stoneHi;
+        if (alt) {
+          this.stonePairs.push({
+            g,
+            hiTris: (pool.r2 ?? []).reduce((a, p) => a + p.tris, 0),
+            loTris: parts.reduce((a, p) => a + p.tris, 0),
+          });
+        }
         for (const part of parts) {
           const mat = part.make();
           instanceVeg(mat, {
@@ -583,7 +638,11 @@ export class Forests {
               if (op) mat.opacityNode = op;
             }
           }
-          addDraw(part.geo, mat, g, part.tris);
+          const mainMesh = addDraw(part.geo, mat, g, pairRing ? 0 : part.tris);
+          if (pairRing) {
+            mainMesh.visible = pairActive;
+            pairMeshes.push(mainMesh);
+          }
           // per-cascade caster siblings. Tree R2 skips its card/bark parts —
           // the crown proxy below carries the whole far shadow (a cascade
           // texel ≥0.5 m out there; 1.8k-tri cards bought nothing but raster)
@@ -630,7 +689,11 @@ export class Forests {
                 (cmat as unknown as { maskShadowNode: unknown }).maskShadowNode =
                   prev ? (prev.and(gate) as NB) : gate;
               }
-              addDraw(geoView(part.geo), cmat, cg, 0, 2 + c);
+              const castMesh = addDraw(geoView(part.geo), cmat, cg, 0, 2 + c);
+              if (pairRing) {
+                castMesh.visible = pairActive;
+                pairMeshes.push(castMesh);
+              }
             }
           }
         }
@@ -723,6 +786,12 @@ export class Forests {
     }
     const indirectStore = storage(this.indirectAttr, 'uint', D * 5);
     const drawGroupBuf = storage(new StorageBufferAttribute(drawGroups, 1), 'uint', D);
+    // per-draw flag: impostor-band crown-proxy groups obey the live
+    // `castercap` clamp in the indirect kernel (computed CPU-side — exact,
+    // no shader group-index arithmetic)
+    const drawImp = new Uint32Array(D);
+    for (let d = 0; d < D; d++) drawImp[d] = isImpBandGroup(drawGroups[d] ?? 0) ? 1 : 0;
+    const drawImpBuf = storage(new StorageBufferAttribute(drawImp, 1), 'uint', D);
 
     // ---- kernels ---------------------------------------------------------------
     const counters = this.counters;
@@ -953,6 +1022,7 @@ export class Forests {
       return k;
     };
 
+    const capImpU = this.capImpU;
     const indirectK = Fn(() => {
       const i = instanceIndex;
       If(i.greaterThanEqual(D), () => {
@@ -960,7 +1030,19 @@ export class Forests {
       });
       const g = drawGroupBuf.element(i) as unknown as NU;
       const raw = atomicLoad(counters.element(g)) as unknown as NU;
-      const cap = capBuf.element(g) as unknown as NU;
+      const capB = capBuf.element(g) as unknown as NU;
+      // impostor-band proxies clamp to the live `castercap` value: appends
+      // still fill the full boot allocation, so drawing the first N compact
+      // entries reproduces the pre-fix cap's append-order drop EXACTLY
+      // (the raster cost being A/B'd), with zero cost in the append path
+      const isImp = (drawImpBuf.element(i) as unknown as NU).greaterThan(uint(0));
+      // @types/three types min() float-only; the WGSL builtin is uint-capable
+      // (same deliberate-cast pattern as TSLTypes.vexp3)
+      const capClamped = min(
+        capB as unknown as NF,
+        uint(capImpU) as unknown as NF,
+      ) as unknown as NU;
+      const cap = isImp.select(capClamped, capB) as unknown as NU;
       const n = raw.greaterThan(cap).select(cap, raw);
       indirectStore.element(i.mul(5).add(1)).assign(n);
     })().compute(D);
@@ -974,6 +1056,43 @@ export class Forests {
       makeCull(this.scatter.stones, 'extras'),
       indirectK,
     ];
+
+    // ---- perf-attribution cvars (bm1 hot-read triage, STATUS 2026-07-02) ----
+    const setStoneDetail = (d: 2 | 3): void => {
+      this.stoneDetail = d;
+      for (const m of this.stoneHi) m.visible = d === 3;
+      for (const m of this.stoneLo) m.visible = d === 2;
+      for (const p of this.stonePairs) {
+        this.groupTris[p.g] = d === 3 ? p.hiTris : p.loTris;
+      }
+    };
+    setStoneDetail(this.stoneDetail); // sets the pair groups' groupTris for the boot state
+    numCvar(
+      'stonedetail',
+      'StoneL R2 detail: 3 = K-3 fix (d2:3) | 2 = pre-K-3 twin (?stonedetail= boots it) — perf attribution',
+      () => this.stoneDetail,
+      (n) => setStoneDetail(n >= 2.5 ? 3 : 2),
+      2,
+      3,
+    );
+    numCvar(
+      'castercap',
+      `impostor-band crown-proxy caster cap (${CAP_IMP_BAND} = K-4 fix, 8192 = pre-fix; ?castercap= boots it). ` +
+        'Lowering re-introduces the silent far-shadow drop (veg.capOver > 0) BY DESIGN — perf attribution only',
+      () => this.capImp,
+      (n) => {
+        this.capImp = Math.round(n);
+        this.capImpU.value = this.capImp;
+      },
+      64,
+      CAP_IMP_BAND,
+    );
+  }
+
+  /** effective cap for group g: impostor-band groups obey the live castercap */
+  private effCap(g: number): number {
+    const cap = this.groupCaps[g] ?? 0;
+    return isImpBandGroup(g) ? Math.min(cap, this.capImp) : cap;
   }
 
   /** wire the CSM rig (cascade cameras feed the caster cull) */
@@ -1054,7 +1173,10 @@ export class Forests {
     const ab = await renderer.getArrayBufferAsync(
       attr as Parameters<Renderer['getArrayBufferAsync']>[0],
     );
-    return { counts: [...new Uint32Array(ab)], caps: [...this.groupCaps] };
+    return {
+      counts: [...new Uint32Array(ab)],
+      caps: [...this.groupCaps].map((_c, g) => this.effCap(g)),
+    };
   }
 
   private async readStats(renderer: Renderer): Promise<void> {
@@ -1075,10 +1197,11 @@ export class Forests {
       let capOver = 0;
       for (let g = 0; g < GROUPS; g++) {
         const raw = counts[g] ?? 0;
-        const cap = this.groupCaps[g] ?? 0;
+        const cap = this.effCap(g);
         // a group past its cap SILENTLY drops an append-order-dependent
         // subset — that reshuffle popped whole grove shadows (K-4 root
-        // cause). Surface it: any nonzero veg.capOver is a correctness bug.
+        // cause). Surface it: any nonzero veg.capOver is a correctness bug
+        // (EXPECTED while the castercap cvar is lowered for attribution).
         if (raw > cap) capOver++;
         const n = Math.min(raw, cap);
         tris += n * (this.groupTris[g] ?? 0);
