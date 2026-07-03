@@ -32,8 +32,19 @@
  *     [--w 2592] [--h 1676] [--score 8] [--sustain 3] [--tag name]
  *     [--maxevents N]  [--<k>=v forwarded to the page]
  *
- * Acceptance (K-4): zero events at default thresholds over the full tour;
- * user confirms in free flight.
+ * DOLLY MODE — the clean per-band experiment: a straight slow push from
+ * --cam "<x,y,z,yaw,pitch>" at --speed m/frame for --frames. Content
+ * crosses ONE ring boundary at ~zero optical flow otherwise; each tree's
+ * crossfade spans hundreds of frames, so ANY tile step = a transition
+ * defect, not motion. (The tour-mode tile stream at high sun contrast is
+ * dominated by legitimate shadow-boundary sweeps/dapple arrival — real
+ * image motion, not pops; use dolly for the K-4 verdict.)
+ *
+ *   npx tsx tools/probe-pops.ts --mode dolly --cam "620,320,1450,0,-0.15" \
+ *     --speed 0.06 --frames 3000 [--score 8] [--sustain 3]
+ *
+ * Acceptance (K-4): zero events in dolly pushes through each band
+ * (26/150/460/1100 m) + zero flashes on the tour; user confirms in flight.
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -92,6 +103,8 @@ function pageScript(opts: {
   u1: number;
   scoreThresh: number;
   sustainThresh: number;
+  /** dolly mode: straight push instead of the tour */
+  dolly: { x: number; y: number; z: number; yaw: number; pitch: number; speed: number } | null;
 }): string {
   return `(async () => {
   const O = ${JSON.stringify(opts)};
@@ -188,13 +201,28 @@ function pageScript(opts: {
   };
 
   const du = (O.u1 - O.u0) / O.frames;
+  // dolly: straight push along the view direction (yaw/pitch fixed)
+  const dollyPose = (f) => {
+    const D = O.dolly;
+    const fwd = [
+      -Math.sin(D.yaw) * Math.cos(D.pitch),
+      Math.sin(D.pitch),
+      -Math.cos(D.yaw) * Math.cos(D.pitch),
+    ];
+    const d = f * D.speed;
+    return {
+      p: [D.x + fwd[0] * d, D.y + fwd[1] * d, D.z + fwd[2] * d],
+      yaw: D.yaw, pitch: D.pitch,
+    };
+  };
+  const poseAt = (f) => (O.dolly ? dollyPose(f) : dbg.flyPose(O.u0 + f * du));
   // pre-roll at the segment start: the pose jump from spawn re-converges
   // TRAA history (~33+ frames at the far-rest weight floor) — without this
   // the first events are fake
-  hk.setPose(dbg.flyPose(O.u0));
+  hk.setPose(poseAt(0));
   await hk.settle(120);
   for (let f = 0; f < O.frames; f++) {
-    const pose = dbg.flyPose(O.u0 + f * du);
+    const pose = poseAt(f);
     hk.setPose(pose);
     const before = hk.stats.frame;
     await hk.settle(1);
@@ -300,12 +328,25 @@ async function main(): Promise<void> {
   const slow = Number(str(args['slow']) ?? 4);
   const frames = args['frames'] !== undefined
     ? Number(str(args['frames']))
-    : Math.max(16, Math.round((u1 - u0) * 11040 * slow));
+    : str(args['mode']) === 'dolly'
+      ? 3000
+      : Math.max(16, Math.round((u1 - u0) * 11040 * slow));
+  // dolly mode: --mode dolly --cam "x,y,z,yaw,pitch" --speed m/frame
+  let dolly: { x: number; y: number; z: number; yaw: number; pitch: number; speed: number } | null =
+    null;
+  if (str(args['mode']) === 'dolly') {
+    const cam = (str(args['cam']) ?? '').split(',').map(Number);
+    const speed = Number(str(args['speed']) ?? 0.06);
+    if (cam.length < 5 || cam.some((n) => !Number.isFinite(n)) || !Number.isFinite(speed)) {
+      throw new Error('dolly needs --cam "x,y,z,yaw,pitch" and finite --speed');
+    }
+    dolly = { x: cam[0]!, y: cam[1]!, z: cam[2]!, yaw: cam[3]!, pitch: cam[4]!, speed };
+  }
   // fail LOUDLY on malformed args: a NaN u0 once produced frames=NaN → the
   // capture loop ran ZERO iterations and reported a clean "0 events" (the
   // zsh `for … set -- $seg` word-splitting trap, 2026-07-02) — a silent
   // no-op probe is worse than a crashed one
-  if (!Number.isFinite(u0) || !Number.isFinite(u1) || u1 <= u0) {
+  if (!dolly && (!Number.isFinite(u0) || !Number.isFinite(u1) || u1 <= u0)) {
     throw new Error(`bad span: --u0 ${str(args['u0'])} --u1 ${str(args['u1'])}`);
   }
   if (!Number.isFinite(frames) || frames < 16) {
@@ -317,7 +358,10 @@ async function main(): Promise<void> {
   const dir = 'shots/wip/pops';
   mkdirSync(dir, { recursive: true });
 
-  const consumed = new Set(['w', 'h', 'frames', 'u0', 'u1', 'score', 'sustain', 'tag', 'maxevents', 'slow']);
+  const consumed = new Set([
+    'w', 'h', 'frames', 'u0', 'u1', 'score', 'sustain', 'tag', 'maxevents',
+    'slow', 'T', 'mode', 'speed', 'cam',
+  ]);
   const extra: Record<string, string> = { wind: '0', lockexp: '1' };
   for (const [k, v] of Object.entries(args)) {
     if (!consumed.has(k)) extra[k] = v === true ? '1' : String(v);
@@ -326,7 +370,14 @@ async function main(): Promise<void> {
   const { browser } = await launchWebGPU();
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
   page.on('pageerror', (err) => console.error('[pageerror]', err.message));
-  const url = laasUrl({ scene: 'world', width, height, T: 19, extra });
+  // default noon: golden-hour contrast turns world-fixed shadow boundaries
+  // into fast luma ramps as they sweep screen tiles under camera motion —
+  // indistinguishable from pops at tile level (2026-07-02 triage). T=12 is
+  // the low-contrast pop-detection condition; pass --T 19 for sweep-heavy
+  // A/B comparisons only.
+  const url = laasUrl({
+    scene: 'world', width, height, T: Number(str(args['T']) ?? 12), extra,
+  });
   console.log(`[pops] ${url}`);
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(
@@ -338,9 +389,15 @@ async function main(): Promise<void> {
   if (bootErr) throw new Error(bootErr);
   await page.evaluate(async () => window.__laas.settle && (await window.__laas.settle(240)));
 
-  console.log(`[pops] flying u ${u0}→${u1} over ${frames} frames…`);
+  console.log(
+    dolly
+      ? `[pops] dolly from ${str(args['cam'])} at ${dolly.speed} m/frame over ${frames} frames…`
+      : `[pops] flying u ${u0}→${u1} over ${frames} frames…`,
+  );
   const t0 = Date.now();
-  const raw = await page.evaluate(pageScript({ frames, u0, u1, scoreThresh, sustainThresh }));
+  const raw = await page.evaluate(
+    pageScript({ frames, u0, u1, scoreThresh, sustainThresh, dolly }),
+  );
   await browser.close();
   const res = JSON.parse(raw as string) as PopResult;
   console.log(
