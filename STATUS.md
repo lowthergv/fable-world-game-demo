@@ -214,6 +214,58 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 
 ## Next actions (always keep current)
 
+- **K-1 CARRIED FIX LANDED — HISTORY-CONFIDENCE TRAA, AGENT-SIDE GATES ALL
+  GREEN (2026-07-03). AWAITING USER RE-CONFIRM (K-list rule).**
+  Final design (TraaResolve.ts, `traa_conf` cvar + `?traaconf=0` boot A/B;
+  new boot overrides ?traagamma/?traafar0/?traafar1/?traawmin[conf] for
+  probe sweeps; LAAS_BASE env for all tools → worktree dev servers):
+  per-pixel HISTORY CONFIDENCE stored in the history alpha channel
+  (|a| = confidence, sign(a) = last clip direction — rgba16f, nothing read
+  alpha before). Confidence rises 1/8 on trips of the STOCK-γ box in the
+  direction OPPOSITE the last trip (jitter ping-pong = the K-1 flicker
+  signature), decays 1/96 on calm frames, hard-resets on same-direction
+  trips (persistent drift = real change) or any velocity. It UNLOCKS a
+  strong temporal path gated THREE ways — rest (stillness²) × beyond the
+  wind fade (farK, smoothstep 260→440 m) × confident — which goes to
+  γ=8 + wMin=0.01 (cvars traa_gammaconf/traa_wminconf): true temporal
+  supersampling on provably-static content; conf's persistent-drift reset
+  keeps cloud-shadow sweeps and GI steps live under it.
+  MEASURED (bm3 T19 native rest, vs same-build ?traaconf=0 control
+  0.411 mean / 1.48 p95, == the 2026-07-02 baseline):
+  - rest flicker mean 0.411 → **0.132** (−68%), p95 1.48 → 0.46,
+    >5/255 px 1.53% → 0.27%; the worst-tile list (bottom-band canopy,
+    the user's complaint region) EMPTIES at the report threshold.
+  - pan 3.98 vs 4.11 control — no regression (conf resets under motion).
+  - wind sway (bm7 interior, wind on, NEW lag-amplitude probe — scratchpad;
+    lag-24 ≈ sway half-period): 5.96 vs 6.09 control = 98% amplitude
+    preserved; near foliage behavior is byte-equivalent to the shipped
+    resolve (strong path is distance-gated off inside the wind zone).
+  - HF Laplacian vs fresh 4×SSAA: 108.4% (pass band 75–115).
+  - perf `bench ab traa_conf 1 0 6` @bm3 native: Δp50 ≈ 0 (17.0 vs 17.9 ms,
+    vsync-bucket noise; fps identical).
+  ATTRIBUTION CORRECTIONS (5 measured dead-ends, kept for the record):
+  (1) the old "wind-gate AND-condition" story was incomplete — opening the
+  distance gate at γ=3 is a NO-OP (0.418): γ-widening alone never was the
+  lever; the w·current injection is (γ8+w0.05 → only 0.346; w→0.01 →
+  0.115). (2) velocity CANNOT protect wind sway (the velocity seam is
+  analytic camera reprojection — zero at rest for sway and statics alike);
+  (3) sway pixels alternate at jitter frequency too (jitter rides swaying
+  content), so no per-pixel alternation/frequency test separates them —
+  w-strength anywhere sway lives crushed lag-24 amplitude to 39-44%;
+  (4) spatial 3×3-mean substitution on confident pixels converges to a BOX
+  BLUR at steady state, not a jitter-phase average — HF fell 86→75%;
+  rejected. (5) worst near tiles are dense crowns whose whole-neighborhood
+  coverage flips with jitter phase — only temporal accumulation fixes them.
+  K-1 RESIDUAL (documented, owned by a phase-2 item): sub-pixel canopy
+  boil INSIDE the wind zone (100–440 m) keeps shipped-resolve behavior.
+  STRUCTURAL COMPLETION (queued): write the wind displacement into the
+  TRAA velocity seam (per-material velocity for veg — THREE-NOTES
+  VelocityNode gotcha); then sway carries REAL velocity, the wind gate
+  becomes unnecessary, and the strong path can extend to any distance.
+  USER RE-CONFIRM CHECKLIST: bm3/bm9 at rest + slow pan (the old check),
+  the descent canopy shimmer (tour start, look down), AND wind feel up
+  close (leaves must not smear — `traa_conf` toggles live for A/B).
+
 - **M2 RT-0 LANDED (2026-07-03) — BVH + rt_debug + Mrays/s TABLE (gate item 1 ✓).**
   New `src/rt/`: RtBvh.ts (binned-SAH over 16,384 terrain tiles + 188,713
   tree proxies = 205k prims → 141k nodes, depth 22, 214 ms CPU one-time at
