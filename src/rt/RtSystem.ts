@@ -76,7 +76,7 @@ export interface RtPoolDims {
   heights: number[];
 }
 
-const TMAX = 8000;
+export const TMAX = 8000;
 const SINK = 8192;
 
 type Mat4Mul = { mul: (v: NV4) => NV4 };
@@ -139,6 +139,10 @@ export class RtSystem {
     return this.bvh !== null;
   }
 
+  get builtBvh(): RtBvhBuffers | null {
+    return this.bvh;
+  }
+
   statsLine(): string {
     const b = this.bvh;
     if (!b) return 'rt: BVH not built (run `rt build`)';
@@ -168,7 +172,7 @@ export class RtSystem {
     return wdir.xyz.normalize();
   }
 
-  private trace(bvh: RtBvhBuffers, ro: NV3, rd: NV3, tmax: NF, anyHit: number): NV4 {
+  trace(bvh: RtBvhBuffers, ro: NV3, rd: NV3, tmax: NF, anyHit: number): NV4 {
     return rtTraceFn({
       nodes: bvh.nodes,
       pidx: bvh.primIdx,
@@ -184,7 +188,7 @@ export class RtSystem {
     }) as NV4;
   }
 
-  private normalAt(bvh: RtBvhBuffers, oi: NU, p: NV3): NV3 {
+  normalAt(bvh: RtBvhBuffers, oi: NU, p: NV3): NV3 {
     return rtNormalFn({
       pa: bvh.primA,
       pb: bvh.primB,
@@ -194,6 +198,23 @@ export class RtSystem {
       res: float(this.hf.res),
       p,
     }) as NV3;
+  }
+
+  /**
+   * Shared hit shade: n·sun on a kind-tinted albedo, distance-fogged to sky.
+   * Assumes `res.x` (t) > 0 — callers select against their own miss/sky
+   * handling. Used by tickDebug (mode 1) and the RT-1 water-reflection kernel.
+   */
+  hitShade(bvh: RtBvhBuffers, ro: NV3, rd: NV3, res: NV4): NV3 {
+    const sky = vec3(0.55, 0.68, 0.85);
+    const t = res.x;
+    const p = ro.add(rd.mul(t));
+    const n = this.normalAt(bvh, uint(res.y.max(0)), p);
+    const isTree = res.y.greaterThanEqual(bvh.tileCount) as NB;
+    const albedo = isTree.select(vec3(0.16, 0.34, 0.12), vec3(0.42, 0.38, 0.33));
+    const ndl = n.dot(vec3(sunU.dir)).max(0).mul(0.85).add(0.15);
+    const fogK = t.div(TMAX).pow(0.7).min(1);
+    return mix(albedo.mul(ndl), sky, fogK) as NV3;
   }
 
   // ---- rt_debug view --------------------------------------------------
@@ -244,15 +265,10 @@ export class RtSystem {
         );
         // mode 1: hit shade — n·sun on a kind-tinted albedo, distance-fogged
         const sky = vec3(0.55, 0.68, 0.85);
-        const p = ro.add(rd.mul(t));
-        const n = this.normalAt(bvh, uint(res.y.max(0)), p);
-        const isTree = res.y.greaterThanEqual(bvh.tileCount) as NB;
-        const albedo = isTree.select(vec3(0.16, 0.34, 0.12), vec3(0.42, 0.38, 0.33));
-        const ndl = n.dot(vec3(sunU.dir)).max(0).mul(0.85).add(0.15);
-        const fogK = t.div(TMAX).pow(0.7).min(1);
-        const shade = mix(albedo.mul(ndl), sky, fogK);
+        const shade = this.hitShade(bvh, ro, rd, res);
         const lit = hit.select(shade, sky);
         // mode 3: prim kind — terrain gray / tree green / miss blue
+        const isTree = res.y.greaterThanEqual(bvh.tileCount) as NB;
         const kind = hit.select(
           isTree.select(vec3(0.1, 0.8, 0.2), vec3(0.6, 0.6, 0.6)),
           vec3(0.1, 0.15, 0.6),

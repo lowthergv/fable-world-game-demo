@@ -214,6 +214,60 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 
 ## Next actions (always keep current)
 
+- **M2 RT-1 LANDED (2026-07-06) — water reflections, high tier (M2 SCAFFOLD
+  item 3). AWAITING: broader visual tuning pass + user confirm.**
+  Architecture (worktree branch claude/trusting-goldberg-d3780a; see
+  `src/render/WaterRtReflect.ts`): a half-res water G-buffer (world position
+  +validity, world normal — TWO single-attachment `MeshBasicNodeMaterial`
+  passes over twin meshes sharing `WaterSurface`'s geometry + per-level
+  origin/innerRect uniforms, NOT one MRT pass — `fragmentNode = mrt(...)` on
+  a real `Mesh` reliably failed to compile here, "WGSL error: struct member
+  m0 not found", regardless of Discard placement; bare `NodeMaterial` also
+  failed identically — only `MeshBasicNodeMaterial` + plain `colorNode`/
+  `maskNode` compiled, matching `VegPrepass.ts`'s proven `depthPrepassTwin`
+  pattern. Worth a THREE-NOTES entry if this recurs.) feeds a lazily-built
+  compute kernel (shaped like `RtSystem.tickDebug` — no-ops until the RT-0
+  BVH resolves) that traces each valid texel's reflection ray against the
+  BVH and writes a half-res `rt_water_refl` `StorageTexture`. `WaterMaterial.
+  reflection()` samples it behind a live `water_rt` cvar (default OFF) +
+  numeric uniform gate — miss/off always falls through to the EXISTING
+  crowned-horizon/SSR fallback chain unchanged (no sky/horizon logic
+  duplicated). `?waterrtdbg=pos|nrm|refl` debug ladder (PostStack bypass,
+  `?view=rt`'s pattern) verified each stage before wiring into the material.
+  ADDITIONAL FIX REQUIRED: the new texture sample pushed water's fragment
+  shader to 17 sampled textures, over the WebGPU device's default 16-per-
+  stage limit (adapter supports 48) — `Diagnostics.ts buildRequiredLimits`
+  now also requests `maxSampledTexturesPerShaderStage: 32`; this is a
+  device-capability request at boot, not a per-frame cost, so it doesn't
+  touch the framealign claim below.
+  VERIFIED (bm2 "Dawn lake mist", dev server): `water_rt=0` renders the
+  unchanged SSR/crowned-horizon baseline; `water_rt=1` shows visibly
+  different (more distant/grazing-angle) reflection content, confirming the
+  pipeline works end-to-end. `bench ab water_rt 0 1` at 1280×800: clean
+  Δp50 +2.50 ms (34.2→36.7). At native 2592×1676 the SAME command read
+  Δp50 0.00 ms (33.3→33.3) — but p90-p99 were flat at ~75 ms across BOTH
+  arms with an unusually high spike count (60/8s), meaning something else
+  ceilings wall time in this headless run at native res; the `gpu` column
+  showed a noisy +1 to +5 ms delta, directionally consistent with the
+  small-viewport reading and the RT-0-era calibration ("~4-6 ms/frame at
+  half res on lake framings"). Framealign (base tier off) is provable by
+  construction, not just measurement: `reflection()`'s RT branch is gated
+  by a live uniform (`rtOn`) that's 0 by default, so `rtHit` is always
+  false and the function returns the untouched `ssr` value — no separate
+  code path to regress.
+  KNOWN ROUGH EDGE (visual, not correctness): a bright-green artifact
+  appeared near the shoreline at "Alpine tarn" — likely the flat
+  kind-tinted hit-shade (borrowed from `tickDebug`'s debug palette) plus
+  naive bilinear half-res upsampling at a mask edge. Plan's own out-of-
+  scope list flagged both the shading palette and a bilateral upsample as
+  follow-ups gated on exactly this kind of gate-shot finding.
+  NEXT: re-run the native-res `bench ab` on a real (non-headless) session
+  to get a clean p50 reading un-ceilinged by the headless environment;
+  judge the green-artifact severity and pull the bilateral-upsample/
+  palette follow-ups forward if it reads as blocking; then user confirm.
+  Item 4 in the M2 SCAFFOLD queue (shore-level water-not-level-with-ground)
+  is unstarted and unrelated to this landing.
+
 - **K-1 USER RE-CONFIRM ROUND 1 — PARTIAL; TRIAGE PARKED ON USER DIRECTION
   (2026-07-06). Wind feel PASS (the safety gate). NOT closed:** user saw at
   cam "1579.15,757.14,2007.82,0.6258,-0.1690,55" shimmer + "trees loading
@@ -389,6 +443,9 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
      small, high-user-value, do it early in M2.
   3. RT-1: water reflections on the high tier (kills the K-2 family
      structurally); base tier must stay framealign-identical.
+     LANDED 2026-07-06 — see the M2 RT-1 entry at the top of "Next
+     actions" for architecture, the framealign argument, and open
+     follow-ups (visual tuning, a cleaner native-res bench read).
   4. NEW (user 2026-07-03): shore close-up — water surface not quite
      level with the ground; investigate waterline vs clipmap height at
      the margin (suspects: rSurf cap vs terrain sample offset, wet-

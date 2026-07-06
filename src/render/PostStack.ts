@@ -15,6 +15,7 @@ import type { Renderer, StorageBufferNode } from 'three/webgpu';
 import { RenderPipeline } from 'three/webgpu';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { getRtViewTexture } from '../rt/RtSystem';
+import { getWaterRtDebugTexture } from './WaterRtReflect';
 import { traa } from 'three/addons/tsl/display/TRAANode.js';
 import {
   Fn,
@@ -23,6 +24,7 @@ import {
   clamp,
   dot,
   float,
+  fract,
   getScreenPosition,
   getViewPosition,
   instanceIndex,
@@ -80,7 +82,12 @@ export class PostStack {
     // ?view=rt — display the RT-0 debug ray-cast raw (no tone map / grade);
     // texture registered by TerrainScene via setRtViewTexture BEFORE we build
     const rtViewTex = q.get('view') === 'rt' ? getRtViewTexture() : null;
-    renderer.toneMapping = cloudview || skyveldbg || rtViewTex ? NoToneMapping : AgXToneMapping;
+    // ?waterrtdbg=pos|nrm|refl — RT-1 G-buffer/reflection probe ladder, same
+    // module-handoff pattern (registered by TerrainScene before PostStack)
+    const waterRtDbgMode = q.get('waterrtdbg');
+    const waterRtDbgTex = waterRtDbgMode ? getWaterRtDebugTexture(waterRtDbgMode) : null;
+    renderer.toneMapping =
+      cloudview || skyveldbg || rtViewTex || waterRtDbgTex ? NoToneMapping : AgXToneMapping;
     renderer.toneMappingExposure = 1.0;
     const frameU = runiform(0);
     // The post quad pass binds its own orthographic camera: `cameraPosition`,
@@ -608,6 +615,20 @@ export class PostStack {
       return c.mul(vig).add(grain);
     })();
 
+    // ?waterrtdbg=pos|nrm|refl — RT-1 probe ladder: pos wraps world position
+    // to a 50 m grid (motion under camera pans confirms the G-buffer tracks
+    // the camera-following clipmap), nrm remaps [-1,1] normals to [0,1],
+    // refl is the shaded reflection tinted dark red where it's a miss.
+    const waterRtDbgView =
+      waterRtDbgTex
+        ? Fn((): NV3 => {
+            const raw = texture(waterRtDbgTex, screenUV) as unknown as NV4;
+            if (waterRtDbgMode === 'nrm') return raw.xyz.mul(0.5).add(0.5);
+            if (waterRtDbgMode === 'pos') return fract(raw.xyz.div(50));
+            return mix(vec3(0.6, 0.05, 0.05), raw.xyz, raw.w);
+          })()
+        : null;
+
     // ?skyveldbg=err|raw|ana — TRAA velocity diagnostics over far geometry
     // (>1.5 km): `ana` paints the analytic camera reprojection (static
     // camera ⇒ black; this is what TRAA consumes), `raw` paints the velocity
@@ -636,6 +657,7 @@ export class PostStack {
     // AO/TRAA/bloom/exposure/grade), default = full chain
     this.post.outputNode =
       rtViewTex !== null ? texture(rtViewTex, screenUV)
+      : waterRtDbgView !== null ? waterRtDbgView
       : skyVelDbgView !== null ? skyVelDbgView
       : cloudview === '9' ? vec3(1, 0, 0)
       : cloudview !== null && cloudview !== '' ? aerialNode

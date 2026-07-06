@@ -31,6 +31,14 @@ import { Heightfield } from '../world/Heightfield';
 import { buildTerrainShadowProxy } from '../world/ShadowProxy';
 import { TerrainTiles } from '../world/TerrainTiles';
 import { WaterSurface } from '../world/WaterSurface';
+import {
+  WaterRtReflectPass,
+  registerWaterRtConsole,
+  setWaterRtDebugPass,
+} from '../render/WaterRtReflect';
+import { StorageTexture } from 'three/webgpu';
+import { uniform } from 'three/tsl';
+import type { NF } from '../gpu/TSLTypes';
 import { PostStack } from '../render/PostStack';
 import { setupSunShadows } from '../render/ShadowSetup';
 import { Clouds } from '../sky/Clouds';
@@ -154,13 +162,31 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
   }
 
   // Phase 6: stream/lake water clipmap (?ablate=water to A/B)
+  // RT-1 (M2 SCAFFOLD item 3): the reflection texture + live enabled-uniform
+  // are created BEFORE WaterSurface so its material graph holds a stable
+  // reference from construction time — a StorageTexture can't be resized/
+  // recreated in place once embedded in a compiled shader (ensureDebugTex's
+  // own constraint for RT-0's debug view). Both are shared with
+  // WaterRtReflectPass, constructed later once RtSystem exists (below).
+  let waterRef: WaterSurface | null = null;
+  let waterRtTex: StorageTexture | null = null;
+  let waterRtEnabledU: ReturnType<typeof uniform> | null = null;
   if (view !== 'split' && !ablate.has('water')) {
+    const rtCanvas = engine.renderer.domElement as HTMLCanvasElement;
+    waterRtTex = new StorageTexture(
+      Math.max(2, Math.floor(rtCanvas.width / 2)),
+      Math.max(2, Math.floor(rtCanvas.height / 2)),
+    );
+    waterRtTex.generateMipmaps = false;
+    waterRtEnabledU = uniform(0);
     const water = new WaterSurface(
       hf,
       sunSky.atmosphere,
       canopyTex,
       ablate.has('gi') ? null : gi,
+      { tex: waterRtTex, enabled: waterRtEnabledU as unknown as NF },
     );
+    waterRef = water;
     engine.scene.add(water.group);
     engine.onUpdate(() => water.update(engine.camera));
   }
@@ -257,6 +283,25 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
     engine.onUpdate(() => rtSys.tickDebug(engine.renderer, engine.camera));
   }
 
+  // RT-1 (M2 SCAFFOLD item 3): water reflections, high tier. `water_rt`
+  // boolCvar (default off) is the live same-boot A/B toggle (bench ab
+  // water_rt 0 1); base tier (off) never dispatches the G-buffer/compute
+  // work — see WaterRtReflect.ts's framealign notes.
+  let waterRtPassRef: WaterRtReflectPass | null = null;
+  if (waterRef && waterRtTex && waterRtEnabledU) {
+    const waterRtPass = new WaterRtReflectPass(hf, rtSys, waterRef, waterRtTex, waterRtEnabledU);
+    waterRtPassRef = waterRtPass;
+    registerWaterRtConsole(waterRtPass);
+    const rtq = new URLSearchParams(window.location.search);
+    const bootWaterRt = rtq.get('water_rt');
+    if (bootWaterRt !== null) waterRtPass.enabled = bootWaterRt !== '0';
+    if (rtq.get('waterrtdbg') !== null) {
+      waterRtPass.debugForced = true;
+      setWaterRtDebugPass(waterRtPass);
+    }
+    engine.onUpdate(() => waterRtPass.tick(engine.renderer, engine.camera));
+  }
+
   (window as unknown as { __laasDbg?: Record<string, unknown> }).__laasDbg = {
     engine,
     sunSky,
@@ -269,6 +314,7 @@ export async function buildTerrainScene(ctx: WorldContext): Promise<void> {
         rtSys.bench(engine.renderer, engine.camera, mode, opts),
       stats: () => rtSys.statsLine(),
     },
+    waterRt: waterRtPassRef,
   };
 
   // GPU particles: snow/pollen/leaves riding the wind (?ablate=particles)
