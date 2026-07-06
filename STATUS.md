@@ -214,6 +214,34 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 
 ## Next actions (always keep current)
 
+- **K-1 USER RE-CONFIRM ROUND 1 — PARTIAL; TRIAGE PARKED ON USER DIRECTION
+  (2026-07-06). Wind feel PASS (the safety gate). NOT closed:** user saw at
+  cam "1579.15,757.14,2007.82,0.6258,-0.1690,55" shimmer + "trees loading
+  in and out" + distant-mountain shimmer; flythrough shimmer angle-
+  dependent; `traa_conf` live A/B read inconclusive to them.
+  **HEADLESS NO-REPRO (frame-exact, that pose):** rest probe pristine
+  (mean ≤0.12/255, worst tile ≤1.5) across T 8/12/19, live-like conditions
+  (wind on, exposure free, day cycle on — cycle also ablated: no effect),
+  and display-native 3456×2234. So round-1 shimmer is NOT the static
+  jitter-flicker class the fix targets. OPEN LEADS, in order:
+  (a) VERIFY THE PORT — if the user's session was on 5173 (main checkout,
+      no fix; `traa_conf` doesn't exist there → unknown-command ≈ their
+      "inconclusive"), round 1 was run on the WRONG BUILD → redo on the
+      branch build;
+  (b) user demo recording — tools/probe-demo-replay.ts (NEW, pipeline
+      validated end-to-end vs a self-recorded demo): takes the DevTools
+      localStorage export (laas-demos.json), injects, `demo play`s the
+      exact flight (seed+ToD+path), reports a per-second flicker timeline
+      + top spike tiles. Awaiting the user's export + their
+      devicePixelRatio/canvas numbers;
+  (c) motion-coupled classes — under camera motion the strong path is OFF
+      by design (stillness gate); "trees loading in and out" in motion may
+      be the impostor/crossfade family (K-4-adjacent), not TRAA.
+  When picked up: port check → replay their demo → crop spike tiles →
+  class the events (TRAA rest / motion transition / lighting step) →
+  route to the owning fix. The structural K-1 completion (wind
+  displacement into the TRAA velocity seam) remains queued regardless.
+
 - **K-1 CARRIED FIX LANDED — HISTORY-CONFIDENCE TRAA, AGENT-SIDE GATES ALL
   GREEN (2026-07-03). AWAITING USER RE-CONFIRM (K-list rule).**
   Final design (TraaResolve.ts, `traa_conf` cvar + `?traaconf=0` boot A/B;
