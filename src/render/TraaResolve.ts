@@ -62,7 +62,7 @@ import {
   velocity,
 } from 'three/tsl';
 import { tagGpu } from '../core/GpuProfiler';
-import { numCvar } from '../debug/Console';
+import { boolCvar, numCvar } from '../debug/Console';
 import type { NF, NV2, NV4 } from '../gpu/TSLTypes';
 
 type RendererState = unknown;
@@ -125,8 +125,32 @@ export class TraaResolveNode extends TempNode {
   /** minimum current-frame weight at far-rest (stock floor is 0.05) */
   wMin = 0.03;
   maxVelocityLength = 128;
+  /**
+   * K-1 carried fix (M2): per-pixel history confidence. At rest the clip
+   * box widens wherever history has survived many frames without a
+   * PERSISTENT-direction clip against the stock-γ box — jitter flicker
+   * trips in ALTERNATING directions frame-to-frame and accumulates
+   * confidence; wind sway / lighting drift trip in a held direction and
+   * reset it. This reaches the near-mid canopy inside the wind fade that
+   * the traa_far0 distance gate could never touch (velocity can't gate
+   * wind: the velocity seam is analytic CAMERA reprojection, zero at rest
+   * for sway and statics alike). `traa_conf` toggles live for A/B.
+   */
+  confOn = true;
+  /**
+   * Full-strength temporal accumulation where it is provably safe: at rest,
+   * BEYOND the wind fade (farK), AND history-confident (conf resets on
+   * persistent drift, so cloud-shadow sweeps / GI steps stay live). γ=8 +
+   * w=0.01 is the 2026-07-03 gate-open winner (bm3 rest 0.411→0.115); the
+   * triple gate is what makes shipping it safe.
+   */
+  gammaConf = 8.0;
+  wMinConf = 0.01;
 
   private readonly uGammaStill = uniform(3.0);
+  private readonly uConfOn = uniform(1);
+  private readonly uGammaConf = uniform(8.0);
+  private readonly uWMinConf = uniform(0.01);
   private readonly uFar0 = uniform(260);
   private readonly uFar1 = uniform(440);
   private readonly uWMin = uniform(0.03);
@@ -181,6 +205,27 @@ export class TraaResolveNode extends TempNode {
       () => this.far1, (n) => { this.far1 = n; }, 0, 5000);
     numCvar('traa_wmin', 'TRAA min current-frame weight at far-rest',
       () => this.wMin, (n) => { this.wMin = n; }, 0.005, 0.2);
+    boolCvar('traa_conf', 'TRAA history-confidence anti-flicker (K-1 fix)',
+      () => this.confOn, (b) => { this.confOn = b; });
+    numCvar('traa_gammaconf', 'TRAA clip width at far+rest+confident',
+      () => this.gammaConf, (n) => { this.gammaConf = n; }, 1, 16);
+    numCvar('traa_wminconf', 'TRAA min current weight at far+rest+confident',
+      () => this.wMinConf, (n) => { this.wMinConf = n; }, 0.002, 0.2);
+    // boot-time overrides for probe sweeps (?traaconf=0, ?traagamma=N,
+    // ?traafar0/1=N, ?traawmin=N) — cvar values only, frame-exact A/Bs
+    const q = new URLSearchParams(window.location.search);
+    const bootConf = q.get('traaconf');
+    if (bootConf !== null) this.confOn = bootConf !== '0';
+    const num = (k: string, apply: (n: number) => void): void => {
+      const v = Number(q.get(k) ?? NaN);
+      if (Number.isFinite(v)) apply(v);
+    };
+    num('traagamma', (n) => { this.gammaStill = n; });
+    num('traafar0', (n) => { this.far0 = n; });
+    num('traafar1', (n) => { this.far1 = n; });
+    num('traawmin', (n) => { this.wMin = n; });
+    num('traagammaconf', (n) => { this.gammaConf = n; });
+    num('traawminconf', (n) => { this.wMinConf = n; });
   }
 
   getTextureNode(): TextureNode {
@@ -212,6 +257,9 @@ export class TraaResolveNode extends TempNode {
     const renderer = (frame as unknown as { renderer: Renderer }).renderer;
 
     this.uGammaStill.value = this.gammaStill;
+    this.uConfOn.value = this.confOn ? 1 : 0;
+    this.uGammaConf.value = this.gammaConf;
+    this.uWMinConf.value = this.wMinConf;
     this.uFar0.value = this.far0;
     this.uFar1.value = this.far1;
     this.uWMin.value = this.wMin;
@@ -395,7 +443,10 @@ export class TraaResolveNode extends TempNode {
         .add(w12.x.mul(w12.y))
         .add(w3.x.mul(w12.y))
         .add(w12.x.mul(w3.y));
-      const historyColor = crSum.div(crW).max(0).toVar();
+      // rgb floored at 0 (NaN guard, stock); alpha kept SIGNED — it carries
+      // the confidence state (|a| = conf, sign = last clip direction)
+      const historyRaw = crSum.div(crW);
+      const historyColor = vec4(historyRaw.rgb.max(0), historyRaw.a).toVar();
 
       // motion metrics
       const velPx = offsetUV.mul(sizeF).length().toVar();
@@ -425,21 +476,77 @@ export class TraaResolveNode extends TempNode {
       const subW = max(phase, phase.oneMinus());
       const subpixel = subW.x.mul(subW.y).oneMinus().div(0.75);
 
-      const currentWeight = float(0.05).add(subpixel.mul(0.25)).toVar();
-      currentWeight.assign(mix(currentWeight, this.uWMin as unknown as NF, widen));
-      currentWeight.assign(
-        isValidUV.select(currentWeight.add(motionFactor).saturate(), float(1)),
-      );
-
-      // variance clip: stock gamma under motion, widened at far-rest
+      // frame stats (shared by the confidence test and the output clip)
       const N = float(9);
       const mean = moment1.div(N);
       const sigma = sqrt(
         moment2.div(N).sub(mean.pow2()).max(0) as unknown as NF,
       ) as unknown as NV4;
       const gammaBase = mix(0.5, 1, motionFactor.oneMinus().pow2());
+
+      // K-1 HISTORY CONFIDENCE (see field doc). State lives in history
+      // alpha: |a| = confidence, sign(a) = direction of the last stock-box
+      // clip. Test against the UNWIDENED (stock-γ) box so real content
+      // change at rest still resets an already-confident pixel.
+      const histA = clamp(historyColor.a, -1, 1);
+      const prevConf = histA.abs();
+      const prevDir = histA.greaterThanEqual(0).select(float(1), float(-1));
+      const pClipS = mean.rgb; // stock box is centred on the 3×3 mean
+      const eClipS = sigma.rgb.mul(gammaBase).add(1e-7);
+      const vUnitS = historyColor.rgb.sub(pClipS).div(eClipS).abs();
+      const trip = max(vUnitS.x, vUnitS.y, vUnitS.z).greaterThan(1);
+      const dirNow = luminance(historyColor.rgb.sub(pClipS))
+        .greaterThanEqual(0)
+        .select(float(1), float(-1));
+      const atRest = velPx.lessThan(0.15);
+      const sameDir = dirNow.mul(prevDir).greaterThan(0);
+      // Confidence targets exactly one class: pixels whose history is
+      // clipped in ALTERNATING directions at NEAR-FRAME-RATE — the K-1
+      // jitter ping-pong. Three signals, all required:
+      //  · alternating: same-direction trips hard-reset (persistent drift =
+      //    real change);
+      //  · frequent: calm frames DECAY conf;
+      //  · at rest: any velocity resets.
+      // Rise 1/8 / decay 1/96: sticky on purpose — once suppression
+      // stabilises a pixel its trips stop, and a fast decay (1/48) put it
+      // in a visible limit cycle (v5 probe: worst tiles unimproved). The
+      // stickiness is safe because the spatial substitution below is
+      // motion-transparent (the 3×3 mean follows sway/lighting instantly),
+      // so stale confidence costs only a little local spatial filtering.
+      const reset = isValidUV.not().or(atRest.not()).or(trip.and(sameDir));
+      const grown = trip.select(
+        prevConf.add(1 / 8).min(1),
+        prevConf.sub(1 / 96).max(0),
+      );
+      const conf = reset.select(float(0), grown).toVar();
+      const dirStore = trip.select(dirNow, prevDir);
+      // Confidence UNLOCKS the strong temporal path; it never blends
+      // spatially. (A rejected variant substituted the 3×3 mean into the
+      // blend on confident pixels — its steady state is a box BLUR, not a
+      // jitter-phase average: HF energy fell 86→75% of the 4×SSAA ref.
+      // Temporal accumulation is the only fix that ADDS fidelity.)
+      const confK = conf.pow2().mul(this.uConfOn as unknown as NF);
+      // full-strength temporal path: rest × beyond-wind-fade × confident
+      // (see gammaConf field doc) — nothing sways there, and conf resets on
+      // persistent drift so slow real changes (cloud shadows) stay live
+      const strongK = confK.mul(farK).mul(stillness.pow2());
+
+      const currentWeight = float(0.05).add(subpixel.mul(0.25)).toVar();
+      currentWeight.assign(mix(currentWeight, this.uWMin as unknown as NF, widen));
+      currentWeight.assign(
+        mix(currentWeight, this.uWMinConf as unknown as NF, strongK),
+      );
+      currentWeight.assign(
+        isValidUV.select(currentWeight.add(motionFactor).saturate(), float(1)),
+      );
+
+      // variance clip: stock gamma under motion, widened at far-rest,
+      // widest on the triple-gated strong path
       const gamma = gammaBase.add(
-        (this.uGammaStill as unknown as NF).sub(1).mul(widen),
+        max(
+          (this.uGammaStill as unknown as NF).sub(1).mul(widen),
+          (this.uGammaConf as unknown as NF).sub(1).mul(strongK),
+        ),
       );
       const minColor = mean.sub(sigma.mul(gamma)) as unknown as NV4;
       const maxColor = mean.add(sigma.mul(gamma)) as unknown as NV4;
@@ -450,7 +557,8 @@ export class TraaResolveNode extends TempNode {
         maxColor,
       );
 
-      return lumBlend(currentColor, clipped, currentWeight as unknown as NF);
+      const blended = lumBlend(currentColor, clipped, currentWeight as unknown as NF);
+      return vec4(blended.rgb, conf.mul(dirStore));
     });
 
     this.resolveMaterial.colorNode = resolve();

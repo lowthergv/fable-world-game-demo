@@ -335,7 +335,7 @@ async function main(): Promise<void> {
 
   const consumed = new Set([
     'w', 'h', 'mode', 'frames', 'panframes', 'step', 'scale', 'shot', 'tag',
-    'maxmean', 'maxtile', 'cam', 'seed', 'T',
+    'maxmean', 'maxtile', 'cam', 'seed', 'T', 'base',
   ]);
   const extra: Record<string, string> = { wind: '0', lockexp: '1' };
   if (!str(args['cam'])) extra['shot'] = shot;
@@ -354,7 +354,7 @@ async function main(): Promise<void> {
   page.on('console', (msg) => {
     if (msg.type() === 'error') console.log(`[page:error] ${msg.text()}`);
   });
-  const url = laasUrl(urlOpts);
+  const url = laasUrl(urlOpts, str(args['base']) ?? undefined);
   console.log(`[temporal] ${url}`);
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(

@@ -96,7 +96,12 @@ export interface LaasPageOptions {
   extra?: Record<string, string>;
 }
 
-export function laasUrl(opts: LaasPageOptions, base = 'http://localhost:5173/'): string {
+export function laasUrl(
+  opts: LaasPageOptions,
+  // LAAS_BASE lets every tool target a non-default dev server (e.g. a git
+  // worktree's own vite on 5175) without per-tool --base plumbing
+  base: string = process.env['LAAS_BASE'] ?? 'http://localhost:5173/',
+): string {
   const q = new URLSearchParams();
   if (opts.scene) q.set('scene', opts.scene);
   if (opts.seed !== undefined) q.set('seed', String(opts.seed));

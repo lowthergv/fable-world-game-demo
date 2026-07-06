@@ -214,6 +214,135 @@ cov 0.62), contact shadows (?ablate=contact to A/B), black facets root-caused to
 
 ## Next actions (always keep current)
 
+- **K-1 USER RE-CONFIRM ROUND 1 — PARTIAL; TRIAGE PARKED ON USER DIRECTION
+  (2026-07-06). Wind feel PASS (the safety gate). NOT closed:** user saw at
+  cam "1579.15,757.14,2007.82,0.6258,-0.1690,55" shimmer + "trees loading
+  in and out" + distant-mountain shimmer; flythrough shimmer angle-
+  dependent; `traa_conf` live A/B read inconclusive to them.
+  **HEADLESS NO-REPRO (frame-exact, that pose):** rest probe pristine
+  (mean ≤0.12/255, worst tile ≤1.5) across T 8/12/19, live-like conditions
+  (wind on, exposure free, day cycle on — cycle also ablated: no effect),
+  and display-native 3456×2234. So round-1 shimmer is NOT the static
+  jitter-flicker class the fix targets. OPEN LEADS, in order:
+  (a) VERIFY THE PORT — if the user's session was on 5173 (main checkout,
+      no fix; `traa_conf` doesn't exist there → unknown-command ≈ their
+      "inconclusive"), round 1 was run on the WRONG BUILD → redo on the
+      branch build;
+  (b) user demo recording — tools/probe-demo-replay.ts (NEW, pipeline
+      validated end-to-end vs a self-recorded demo): takes the DevTools
+      localStorage export (laas-demos.json), injects, `demo play`s the
+      exact flight (seed+ToD+path), reports a per-second flicker timeline
+      + top spike tiles. Awaiting the user's export + their
+      devicePixelRatio/canvas numbers;
+  (c) motion-coupled classes — under camera motion the strong path is OFF
+      by design (stillness gate); "trees loading in and out" in motion may
+      be the impostor/crossfade family (K-4-adjacent), not TRAA.
+  When picked up: port check → replay their demo → crop spike tiles →
+  class the events (TRAA rest / motion transition / lighting step) →
+  route to the owning fix. The structural K-1 completion (wind
+  displacement into the TRAA velocity seam) remains queued regardless.
+
+- **K-1 CARRIED FIX LANDED — HISTORY-CONFIDENCE TRAA, AGENT-SIDE GATES ALL
+  GREEN (2026-07-03). AWAITING USER RE-CONFIRM (K-list rule).**
+  Final design (TraaResolve.ts, `traa_conf` cvar + `?traaconf=0` boot A/B;
+  new boot overrides ?traagamma/?traafar0/?traafar1/?traawmin[conf] for
+  probe sweeps; LAAS_BASE env for all tools → worktree dev servers):
+  per-pixel HISTORY CONFIDENCE stored in the history alpha channel
+  (|a| = confidence, sign(a) = last clip direction — rgba16f, nothing read
+  alpha before). Confidence rises 1/8 on trips of the STOCK-γ box in the
+  direction OPPOSITE the last trip (jitter ping-pong = the K-1 flicker
+  signature), decays 1/96 on calm frames, hard-resets on same-direction
+  trips (persistent drift = real change) or any velocity. It UNLOCKS a
+  strong temporal path gated THREE ways — rest (stillness²) × beyond the
+  wind fade (farK, smoothstep 260→440 m) × confident — which goes to
+  γ=8 + wMin=0.01 (cvars traa_gammaconf/traa_wminconf): true temporal
+  supersampling on provably-static content; conf's persistent-drift reset
+  keeps cloud-shadow sweeps and GI steps live under it.
+  MEASURED (bm3 T19 native rest, vs same-build ?traaconf=0 control
+  0.411 mean / 1.48 p95, == the 2026-07-02 baseline):
+  - rest flicker mean 0.411 → **0.132** (−68%), p95 1.48 → 0.46,
+    >5/255 px 1.53% → 0.27%; the worst-tile list (bottom-band canopy,
+    the user's complaint region) EMPTIES at the report threshold.
+  - pan 3.98 vs 4.11 control — no regression (conf resets under motion).
+  - wind sway (bm7 interior, wind on, NEW lag-amplitude probe — scratchpad;
+    lag-24 ≈ sway half-period): 5.96 vs 6.09 control = 98% amplitude
+    preserved; near foliage behavior is byte-equivalent to the shipped
+    resolve (strong path is distance-gated off inside the wind zone).
+  - HF Laplacian vs fresh 4×SSAA: 108.4% (pass band 75–115).
+  - perf `bench ab traa_conf 1 0 6` @bm3 native: Δp50 ≈ 0 (17.0 vs 17.9 ms,
+    vsync-bucket noise; fps identical).
+  ATTRIBUTION CORRECTIONS (5 measured dead-ends, kept for the record):
+  (1) the old "wind-gate AND-condition" story was incomplete — opening the
+  distance gate at γ=3 is a NO-OP (0.418): γ-widening alone never was the
+  lever; the w·current injection is (γ8+w0.05 → only 0.346; w→0.01 →
+  0.115). (2) velocity CANNOT protect wind sway (the velocity seam is
+  analytic camera reprojection — zero at rest for sway and statics alike);
+  (3) sway pixels alternate at jitter frequency too (jitter rides swaying
+  content), so no per-pixel alternation/frequency test separates them —
+  w-strength anywhere sway lives crushed lag-24 amplitude to 39-44%;
+  (4) spatial 3×3-mean substitution on confident pixels converges to a BOX
+  BLUR at steady state, not a jitter-phase average — HF fell 86→75%;
+  rejected. (5) worst near tiles are dense crowns whose whole-neighborhood
+  coverage flips with jitter phase — only temporal accumulation fixes them.
+  K-1 RESIDUAL (documented, owned by a phase-2 item): sub-pixel canopy
+  boil INSIDE the wind zone (100–440 m) keeps shipped-resolve behavior.
+  STRUCTURAL COMPLETION (queued): write the wind displacement into the
+  TRAA velocity seam (per-material velocity for veg — THREE-NOTES
+  VelocityNode gotcha); then sway carries REAL velocity, the wind gate
+  becomes unnecessary, and the strong path can extend to any distance.
+  USER RE-CONFIRM CHECKLIST: bm3/bm9 at rest + slow pan (the old check),
+  the descent canopy shimmer (tour start, look down), AND wind feel up
+  close (leaves must not smear — `traa_conf` toggles live for A/B).
+
+- **M2 RT-0 LANDED (2026-07-03) — BVH + rt_debug + Mrays/s TABLE (gate item 1 ✓).**
+  New `src/rt/`: RtBvh.ts (binned-SAH over 16,384 terrain tiles + 188,713
+  tree proxies = 205k prims → 141k nodes, depth 22, 214 ms CPU one-time at
+  first use; trunk capsule + crown ellipsoid per instance from pool heights
+  × instance scale, crown Rxz ×1.04 wind inflation), RtTrace.ts (raw-WGSL
+  stackful traversal via wgslFn ptr params — slab/capsule/ellipsoid
+  intersectors + per-texel heightfield march w/ 6-step bisect inside tile
+  leaves), RtSystem.ts (lazy build from a one-time scatter readback; debug
+  StorageTexture; benchmark). CPU topology / GPU traversal split = D-6 in
+  DEVIATIONS.md (scene static, wind by proxy inflation — refit binds fauna
+  work, not RT-0). Console: `rt build|stats|bench [mode|all]`, cvar
+  `rt_debug` 1/2/3 (hit-shade / BVH heatmap / prim kind); `?view=rt` boots
+  the live ray-cast view through PostStack (module-context texture, raw —
+  base default path byte-identical: branch only evaluates when the param
+  is set). Tool: `tools/probe-rt.ts` (markdown table + JSON to
+  shots/wip/rt/). Debug shots: shots/wip/rt/smoke-*.png (bm3 hit view,
+  bm7 interior + heatmap — proxies align with the raster forest).
+  **MEASUREMENT LAW for compute benches: hold the frame loop (Engine.hold —
+  new) and batch N dispatches per readback fence. The first run timed
+  ~130 ms/dispatch flat across ray counts — that was the native-res scene
+  render serializing between awaited dispatches, not kernel time.**
+  **MRAYS/S TABLE (native 2592×1676, M1 Max, frozen bookmarks, med of 8×
+  8-batch samples; secondary modes trace primary-hit lanes at half res):**
+  | bm | mode | Mrays traced | ms (med) | Mrays/s |
+  |----|------|-------------|----------|---------|
+  | 1 gorge stream    | primary | 4.34 | 8.09  | 537 |
+  | 3 golden vista    | primary | 4.34 | 13.08 | 332 |
+  | 3 golden vista    | shadow  | 0.79 | 2.66  | 298 |
+  | 3 golden vista    | reflect | 0.79 | 6.11  | 130 |
+  | 3 golden vista    | ao(50m) | 0.79 | 3.35  | 237 |
+  | 3 golden vista    | incoh   | 0.79 | 4.94  | 161 |
+  | 7 forest interior | primary | 4.34 | 6.51  | 667 |
+  | 7 forest interior | shadow  | 1.07 | 1.03  | 1044 |
+  | 7 forest interior | ao(50m) | 1.07 | 3.14  | 341 |
+  | 2 lake grazing    | primary | 4.34 | 7.68  | 566 |
+  | 2 lake grazing    | reflect | 0.77 | 3.86  | 200 |
+  CALIBRATION READ (v3 §7 "this number calibrates everything after"):
+  RT-1 water reflections ≈ the reflect rows → ~4–6 ms/frame at half res on
+  lake framings = fits the HIGH tier budget comfortably (base tier
+  untouched). RT-2 shadow rays are cheap where CSM is weakest (any-hit
+  ~1–3 ms half-res). RT-3 AO-class rays ~3 ms half-res — plausible ultra.
+  Vista primary (13 ms) is the ceiling case: long tile marches dominate;
+  candidate optimizations if RT-1 needs them: coarse-mip height march in
+  far tiles, 4-wide BVH. NOT DONE (deliberate): GPU refit kernel (D-6).
+  NEXT: K-1 carried fix (history-confidence TRAA — patch drafted, premise
+  correction: velocity can't gate wind [analytic reprojection is camera-
+  only]; the discriminator is alternating-vs-persistent clip direction at
+  rest — see the K-1 entry), then RT-1.
+
 - **M1 CLOSED WITH ONE EXCEPTION (2026-07-03) — USER K-CONFIRMS IN.
   Current focus → M2 (RT foundation + reflections).**
   User live confirms (their viewport, in motion — K-list rule):
