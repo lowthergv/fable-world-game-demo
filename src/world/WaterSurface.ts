@@ -19,7 +19,7 @@ import type { PerspectiveCamera } from 'three';
 import type { StorageTexture } from 'three/webgpu';
 import type { ProbeGI } from '../gpu/passes/ProbeGI';
 import type { NV2, NV4 } from '../gpu/TSLTypes';
-import { waterMaterial } from '../render/WaterMaterial';
+import { waterMaterial, type WaterLevelHandles, type WaterRtInput } from '../render/WaterMaterial';
 import type { Atmosphere } from '../sky/Atmosphere';
 import type { Heightfield } from './Heightfield';
 import { runiform } from '../gpu/RenderUniform';
@@ -67,6 +67,8 @@ interface Level {
 
 export class WaterSurface {
   readonly group = new Group();
+  /** shared clipmap grid — RT-1's G-buffer prepass reuses this for its twin meshes. */
+  readonly geometry: BufferGeometry;
   private readonly lvls: Level[] = [];
 
   constructor(
@@ -74,17 +76,26 @@ export class WaterSurface {
     atm: Atmosphere,
     canopyTex: StorageTexture | null,
     gi: ProbeGI | null,
+    rt?: WaterRtInput | null,
   ) {
     const geo = gridGeometry();
+    this.geometry = geo;
     for (const cell of LEVEL_CELL) {
       const origin = runiform(new Vector2());
       const innerRect = runiform(new Vector4(1e9, 1e9, -1e9, -1e9));
-      const mat = waterMaterial(hf, atm, canopyTex, gi, {
-        origin: origin as unknown as NV2,
-        innerRect: innerRect as unknown as NV4,
-        cell,
-        far: cell >= 12, // ≥ ±384 m: min-reduced field
-      });
+      const mat = waterMaterial(
+        hf,
+        atm,
+        canopyTex,
+        gi,
+        {
+          origin: origin as unknown as NV2,
+          innerRect: innerRect as unknown as NV4,
+          cell,
+          far: cell >= 12, // ≥ ±384 m: min-reduced field
+        },
+        rt,
+      );
       const mesh = new Mesh(geo, mat);
       mesh.frustumCulled = false; // positions are shader-driven
       mesh.castShadow = false;
@@ -96,6 +107,21 @@ export class WaterSurface {
         cell,
       });
     }
+  }
+
+  /**
+   * Per-level clipmap handles (origin/innerRect uniforms + cell/far), the
+   * SAME objects the main water meshes use — RT-1's G-buffer prepass builds
+   * twin meshes off these so they track the camera-following clipmap with no
+   * extra sync code (see `update()` below, the single source of truth).
+   */
+  levelHandles(): WaterLevelHandles[] {
+    return this.lvls.map((l) => ({
+      origin: l.origin as unknown as NV2,
+      innerRect: l.innerRect as unknown as NV4,
+      cell: l.cell,
+      far: l.cell >= 12,
+    }));
   }
 
   update(cam: PerspectiveCamera): void {

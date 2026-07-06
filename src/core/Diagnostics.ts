@@ -32,6 +32,11 @@ export function buildRequiredLimits(d: GpuDiagnostics): Record<string, number> {
     maxStorageTexturesPerShaderStage: 8,
     maxBufferSize: 1 << 30,
     maxStorageBufferBindingSize: 1 << 30,
+    // water's fragment shader samples one more texture with RT-1 wired in
+    // (rt_water_refl, WaterRtReflect.ts) — 17 tripped the spec default of 16
+    // even though adapters report far higher (48 on M1 Max); headroom for
+    // future per-material texture growth, not just today's exact count.
+    maxSampledTexturesPerShaderStage: 32,
   };
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(want)) {

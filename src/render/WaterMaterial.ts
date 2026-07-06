@@ -65,7 +65,7 @@ import { PERIOD_FBM } from '../gpu/passes/NoiseBake';
 import { bilerpVec2Buffer } from '../gpu/BufferSample';
 import { canopyAt } from '../gpu/passes/Scatter';
 import type { ProbeGI } from '../gpu/passes/ProbeGI';
-import type { NF, NI, NV2, NV3, NV4 } from '../gpu/TSLTypes';
+import type { NB, NF, NI, NV2, NV3, NV4 } from '../gpu/TSLTypes';
 import type { Atmosphere } from '../sky/Atmosphere';
 import type { Heightfield } from '../world/Heightfield';
 import { WORLD_HALF } from '../world/WorldConst';
@@ -88,30 +88,26 @@ export interface WaterLevelHandles {
   far: boolean;
 }
 
-export function waterMaterial(
-  hf: Heightfield,
-  atm: Atmosphere,
-  canopyTex: StorageTexture | null,
-  gi: ProbeGI | null,
-  lvl: WaterLevelHandles,
-): MeshStandardNodeMaterial {
-  const flow = hf.flow;
-  const noiseA = hf.noiseA;
-  if (!flow || !noiseA) throw new Error('waterMaterial needs hydrology + baked noise');
+/** y-sampler for a clipmap level (far levels read the min-reduced field). */
+export function waterSampleYFn(hf: Heightfield, lvl: WaterLevelHandles): (q: NV2) => NF {
+  return (q: NV2): NF => (lvl.far ? hf.sampleWaterYFar(q) : hf.sampleWaterY(q));
+}
 
-  const mat = new MeshStandardNodeMaterial();
-  mat.transparent = true;
-  mat.depthWrite = true;
-  mat.metalness = 0;
-
-  // ---- vertex: clipmap grid (cell units) → world water surface ----------------
-  const sampleY = (q: NV2): NF => (lvl.far ? hf.sampleWaterYFar(q) : hf.sampleWaterY(q));
+/** vertex displacement: clipmap grid (cell units) → world water surface. */
+export function waterDisplacement(hf: Heightfield, lvl: WaterLevelHandles): NV3 {
+  const sampleY = waterSampleYFn(hf, lvl);
   const wxz = lvl.origin.add(positionLocal.xz.mul(lvl.cell));
-  mat.positionNode = vec3(wxz.x, sampleY(wxz), wxz.y);
+  return vec3(wxz.x, sampleY(wxz), wxz.y) as NV3;
+}
 
-  // ---- inner-level cutout + hard world bounds ----------------------------------
-  // Outside ±WORLD_HALF the field samples clamp to the border texel — a wet
-  // border cell would extend an infinite water band into the far shell.
+/**
+ * Inner-level cutout + hard world bounds. Outside ±WORLD_HALF the field
+ * samples clamp to the border texel — a wet border cell would extend an
+ * infinite water band into the far shell. The 6 clipmap levels overlap in
+ * world space; this mask is the ONLY thing that picks a single winning level
+ * per (x,z) — there is no depth-based resolution between them.
+ */
+export function waterMask(lvl: WaterLevelHandles): NB {
   const p = positionWorld.xz;
   const r = lvl.innerRect;
   const insideInner = p.x
@@ -120,16 +116,34 @@ export function waterMaterial(
     .and(p.x.lessThan(r.z))
     .and(p.y.lessThan(r.w));
   const inWorld = p.x.abs().lessThan(WORLD_HALF - 4).and(p.y.abs().lessThan(WORLD_HALF - 4));
-  mat.maskNode = insideInner.not().and(inWorld);
+  return insideInner.not().and(inWorld) as NB;
+}
 
-  // ---- flow field --------------------------------------------------------------
+/** hydrology flow field sampled at the current fragment/vertex world (x,z). */
+export function waterFlow(hf: Heightfield): { spd: NF; fdir: NV2 } {
+  const flow = hf.flow;
+  if (!flow) throw new Error('waterFlow needs hydrology');
   const simRes = hf.simRes;
   const g = clamp(positionWorld.xz.div(4096).add(0.5), 0, 1).mul(simRes).sub(0.5);
   const flowV = bilerpVec2Buffer(flow.flowDir, simRes, g);
   const spd = flowV.length();
   const fdir = flowV.div(spd.max(1e-4));
+  return { spd, fdir };
+}
 
-  // ---- ripple normal: two-phase flowmap over fbm gradients ---------------------
+/**
+ * Ripple normal (world space): two-phase flowmap over fbm gradients. Also
+ * returns the phase offsets/blend weight — the foam pattern (in
+ * `waterMaterial`) advects on the SAME two-phase clock so its octaves never
+ * snap independently of the ripples (see the foam section's comment).
+ */
+export function waterRippleNormal(
+  hf: Heightfield,
+  spd: NF,
+  fdir: NV2,
+): { n: NV3; offA: NV2; offB: NV2; w2: NF } {
+  const noiseA = hf.noiseA;
+  if (!noiseA) throw new Error('waterRippleNormal needs baked noise');
   const CYC = 0.45; // flowmap cycles/s
   const ph1 = fract(time.mul(CYC));
   const ph2 = fract(time.mul(CYC).add(0.5));
@@ -147,7 +161,51 @@ export function waterMaterial(
   // to ~1 and turning every stream into a sky mirror ("white sheet")
   const rippleAmp = float(0.007).add(spd.mul(0.028));
   const slope = grad.mul(rippleAmp);
-  const n = vec3(slope.x.negate(), 1, slope.y.negate()).normalize();
+  const n = vec3(slope.x.negate(), 1, slope.y.negate()).normalize() as NV3;
+  return { n, offA, offB, w2 };
+}
+
+/**
+ * RT-1 hookup: `tex` is the half-res reflection texture RT-1's compute pass
+ * writes (rgb = shaded hit color, w = validity — see WaterRtReflect.ts);
+ * `enabled` is a live numeric uniform (1/0) mirroring the `water_rt` cvar —
+ * gating on it (not just texture validity) guarantees toggling the cvar off
+ * falls back to SSR/sky immediately rather than showing stale RT content.
+ */
+export interface WaterRtInput {
+  tex: StorageTexture;
+  enabled: NF;
+}
+
+export function waterMaterial(
+  hf: Heightfield,
+  atm: Atmosphere,
+  canopyTex: StorageTexture | null,
+  gi: ProbeGI | null,
+  lvl: WaterLevelHandles,
+  rt?: WaterRtInput | null,
+): MeshStandardNodeMaterial {
+  const flow = hf.flow;
+  const noiseA = hf.noiseA;
+  if (!flow || !noiseA) throw new Error('waterMaterial needs hydrology + baked noise');
+
+  const mat = new MeshStandardNodeMaterial();
+  mat.transparent = true;
+  mat.depthWrite = true;
+  mat.metalness = 0;
+
+  // ---- vertex: clipmap grid (cell units) → world water surface ----------------
+  const sampleY = waterSampleYFn(hf, lvl);
+  mat.positionNode = waterDisplacement(hf, lvl);
+
+  // ---- inner-level cutout + hard world bounds ----------------------------------
+  mat.maskNode = waterMask(lvl);
+
+  // ---- flow field --------------------------------------------------------------
+  const { spd, fdir } = waterFlow(hf);
+
+  // ---- ripple normal: two-phase flowmap over fbm gradients ---------------------
+  const { n, offA, offB, w2 } = waterRippleNormal(hf, spd, fdir);
   mat.normalNode = transformNormalToView(n);
 
   // ---- view / depth ------------------------------------------------------------
@@ -264,7 +322,18 @@ export function waterMaterial(
     const e = hitUv.sub(0.5).abs().mul(2);
     const edgeFade = smoothstep(1.0, 0.82, e.x.max(e.y));
     const scene = (viewportSharedTexture(hitUv) as unknown as NV4).rgb;
-    return mix(fallback, scene, hit.mul(edgeFade));
+    const ssr = mix(fallback, scene, hit.mul(edgeFade));
+    // RT-1: prefer the ray-traced hit where the pass is live AND has one for
+    // this pixel — gating on BOTH `rt.enabled` (not just texture validity)
+    // means toggling `water_rt` off falls back to SSR immediately instead of
+    // showing whatever was last written to a now-stale texture.
+    if (rt) {
+      const rtSample = texture(rt.tex, screenUV) as unknown as NV4;
+      const rtOn = (rt.enabled as unknown as NF).greaterThan(0.5);
+      const rtHit = rtSample.w.greaterThan(0.5).and(rtOn);
+      return rtHit.select(rtSample.xyz, ssr);
+    }
+    return ssr;
   })();
   const skyRefl = reflection as unknown as NV3;
   // fresnel on a FLATTENED normal (standard water practice): per-pixel
